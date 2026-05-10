@@ -585,7 +585,12 @@ const resolvers = {
               create: poItems
             }
           },
-          include: { procurementRequest: true, vendor: true, items: true }
+          include: { 
+            procurementRequest: true, 
+            vendor: true, 
+            items: { include: { receipts: true } },
+            receipts: true
+          }
         });
 
         await prisma.procurementRequest.update({
@@ -628,7 +633,12 @@ const resolvers = {
         const po = await prisma.purchaseOrder.update({
           where: { id: input.id },
           data: { status: input.status },
-          include: { procurementRequest: true, vendor: true, items: true }
+          include: { 
+            procurementRequest: true, 
+            vendor: true, 
+            items: { include: { receipts: true } },
+            receipts: true
+          }
         });
 
         console.log(`[Mutation] Updated PO ${po.poNumber} status to ${input.status}`);
