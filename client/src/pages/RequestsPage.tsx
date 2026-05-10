@@ -1,13 +1,18 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation } from '@apollo/client/react'
-import { GET_PROCUREMENT_REQUESTS, CREATE_PROCUREMENT_REQUEST, CREATE_REQUEST_ITEM } from '../graphql/queries'
+import { GET_PROCUREMENT_REQUESTS, CREATE_PROCUREMENT_REQUEST, CREATE_REQUEST_ITEM, REVIEW_PROCUREMENT_REQUEST } from '../graphql/queries'
+import { useUser } from '../contexts/UserContext'
 
 export const RequestsPage: React.FC = () => {
-  const { loading, error, data } = useQuery(GET_PROCUREMENT_REQUESTS)
-  const [createProcurementRequest, { loading: createLoading, error: createError }] = useMutation(CREATE_PROCUREMENT_REQUEST, {
+  const { currentUser } = useUser();
+  const { loading, error, data } = useQuery<any>(GET_PROCUREMENT_REQUESTS)
+  const [createProcurementRequest, { loading: createLoading, error: createError }] = useMutation<any>(CREATE_PROCUREMENT_REQUEST, {
     refetchQueries: [{ query: GET_PROCUREMENT_REQUESTS }],
   })
-  const [createRequestItem, { loading: createItemLoading, error: createItemError }] = useMutation(CREATE_REQUEST_ITEM, {
+  const [createRequestItem, { loading: createItemLoading, error: createItemError }] = useMutation<any>(CREATE_REQUEST_ITEM, {
+    refetchQueries: [{ query: GET_PROCUREMENT_REQUESTS }],
+  })
+  const [reviewRequest, { loading: reviewLoading }] = useMutation<any>(REVIEW_PROCUREMENT_REQUEST, {
     refetchQueries: [{ query: GET_PROCUREMENT_REQUESTS }],
   })
 
@@ -32,6 +37,7 @@ export const RequestsPage: React.FC = () => {
   })
 
   const [statusFilter, setStatusFilter] = useState('ALL')
+  const [rejectionReason, setRejectionReason] = useState<{ [key: string]: string }>({});
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -47,6 +53,7 @@ export const RequestsPage: React.FC = () => {
       const input = {
         ...formData,
         neededByDate: formData.neededByDate || null,
+        requestedById: currentUser?.id || null,
       }
       await createProcurementRequest({ variables: { input } })
       setFormData({
@@ -86,12 +93,82 @@ export const RequestsPage: React.FC = () => {
     }
   }
 
+  const handleReview = async (id: string, decision: string) => {
+    if (!currentUser) return;
+    try {
+      await reviewRequest({
+        variables: {
+          input: {
+            id,
+            approverId: currentUser.id,
+            decision,
+            rejectionReason: decision === 'REJECT' ? rejectionReason[id] : null,
+          }
+        }
+      });
+      if (decision === 'REJECT') {
+        setRejectionReason({ ...rejectionReason, [id]: '' });
+      }
+    } catch (err) {
+      console.error("Failed to review request", err);
+    }
+  }
+
   const filteredRequests = data?.procurementRequests?.filter((req: any) => statusFilter === 'ALL' || req.status === statusFilter) || []
+
+  const canApprove = currentUser?.role === 'ADMIN' || currentUser?.role === 'APPROVER';
+  const pendingRequests = data?.procurementRequests?.filter((req: any) => req.status === 'SUBMITTED' || req.status === 'UNDER_REVIEW') || [];
 
   return (
     <div>
       <h2>Procurement Requests</h2>
       
+      {!currentUser && (
+        <div style={{ padding: '1rem', background: '#ffebee', color: '#c62828', borderRadius: '8px', marginBottom: '1rem' }}>
+          Please select a user from the header dropdown to create or approve requests.
+        </div>
+      )}
+
+      {/* Approvals Section */}
+      <div style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--card-bg)', borderRadius: '8px', borderLeft: '4px solid #f39c12', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+        <h3>Approvals</h3>
+        {canApprove ? (
+          pendingRequests.length > 0 ? (
+            <div style={{ display: 'grid', gap: '1rem' }}>
+              {pendingRequests.map((req: any) => (
+                <div key={req.id} style={{ padding: '1rem', background: 'var(--social-bg)', borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <h4 style={{ margin: '0 0 0.5rem 0' }}>{req.title} <span style={{ fontSize: '0.8rem', color: '#f39c12' }}>[{req.status}]</span></h4>
+                    <span style={{ fontSize: '0.85rem' }}>By: {req.requestedBy?.name || 'Unknown'}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+                    {req.status === 'SUBMITTED' && (
+                      <button onClick={() => handleReview(req.id, 'UNDER_REVIEW')} disabled={reviewLoading} style={{ padding: '0.5rem 1rem', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Mark Under Review</button>
+                    )}
+                    <button onClick={() => handleReview(req.id, 'APPROVE')} disabled={reviewLoading} style={{ padding: '0.5rem 1rem', background: '#2ecc71', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Approve</button>
+                    
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <input 
+                        type="text" 
+                        placeholder="Rejection reason..." 
+                        value={rejectionReason[req.id] || ''} 
+                        onChange={(e) => setRejectionReason({ ...rejectionReason, [req.id]: e.target.value })}
+                        style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
+                      />
+                      <button onClick={() => handleReview(req.id, 'REJECT')} disabled={reviewLoading} style={{ padding: '0.5rem 1rem', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Reject</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p>No requests pending approval.</p>
+          )
+        ) : (
+          <p style={{ color: 'var(--text-secondary)' }}>You do not have permission to approve requests. Must be ADMIN or APPROVER.</p>
+        )}
+      </div>
+
       <div className="form-container" style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--social-bg)', borderRadius: '8px' }}>
         <h3>Create New Request</h3>
         {createError && <p style={{ color: 'red' }}>Error: {createError.message}</p>}
@@ -124,7 +201,7 @@ export const RequestsPage: React.FC = () => {
             <label style={{ display: 'block', marginBottom: '0.5rem' }}>Needed By Date</label>
             <input type="date" name="neededByDate" value={formData.neededByDate} onChange={handleChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
           </div>
-          <button type="submit" disabled={createLoading} style={{ padding: '0.75rem', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem' }}>
+          <button type="submit" disabled={createLoading || !currentUser} style={{ padding: '0.75rem', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem', opacity: !currentUser ? 0.5 : 1 }}>
             {createLoading ? 'Submitting...' : 'Submit Request'}
           </button>
         </form>
@@ -157,8 +234,16 @@ export const RequestsPage: React.FC = () => {
           <div key={req.id} className="request-card" style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', textAlign: 'left' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
               <h3 style={{ margin: 0 }}>{req.title}</h3>
-              <span style={{ padding: '0.25rem 0.5rem', background: 'var(--code-bg)', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold' }}>{req.status}</span>
+              <span style={{ padding: '0.25rem 0.5rem', background: req.status === 'APPROVED' ? '#d4edda' : req.status === 'REJECTED' ? '#f8d7da' : 'var(--code-bg)', color: req.status === 'APPROVED' ? '#155724' : req.status === 'REJECTED' ? '#721c24' : 'inherit', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold' }}>{req.status}</span>
             </div>
+            
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', fontSize: '0.9rem', marginBottom: '1rem', background: 'var(--social-bg)', padding: '0.5rem', borderRadius: '4px' }}>
+              <span><strong>Requested By:</strong> {req.requestedBy?.name || 'N/A'}</span>
+              <span><strong>Approved By:</strong> {req.approvedBy?.name || 'N/A'}</span>
+              {req.approvedAt && <span><strong>Approved At:</strong> {new Date(req.approvedAt).toLocaleDateString()}</span>}
+              {req.rejectionReason && <span style={{ color: '#e74c3c' }}><strong>Reason:</strong> {req.rejectionReason}</span>}
+            </div>
+
             <p style={{ margin: '0 0 0.5rem 0', color: 'var(--text)' }}>Department: {req.department}</p>
             <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem', color: 'var(--text)', marginBottom: '1rem' }}>
               <span>Priority: {req.priority}</span>

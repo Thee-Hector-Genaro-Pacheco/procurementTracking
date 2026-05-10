@@ -3,9 +3,9 @@ import { useQuery, useMutation } from '@apollo/client/react'
 import { GET_PURCHASE_ORDERS, GET_PROCUREMENT_REQUESTS, RECEIVE_PO_ITEM } from '../graphql/queries'
 
 export const ReceivingPage: React.FC = () => {
-  const { data: poData, loading: poLoading, error: poError } = useQuery(GET_PURCHASE_ORDERS)
+  const { data: poData, loading: poLoading, error: poError } = useQuery<any>(GET_PURCHASE_ORDERS)
 
-  const [receivePOItem, { loading: receiveLoading, error: receiveError }] = useMutation(RECEIVE_PO_ITEM, {
+  const [receivePOItem, { loading: receiveLoading, error: receiveError }] = useMutation<any>(RECEIVE_PO_ITEM, {
     refetchQueries: [{ query: GET_PURCHASE_ORDERS }, { query: GET_PROCUREMENT_REQUESTS }],
   })
 

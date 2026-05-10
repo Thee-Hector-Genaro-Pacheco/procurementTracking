@@ -16,6 +16,18 @@ export const GET_PROCUREMENT_REQUESTS = gql`
         partNumber
         estimatedUnitCost
       }
+      requestedBy {
+        id
+        name
+        role
+      }
+      approvedBy {
+        id
+        name
+        role
+      }
+      approvedAt
+      rejectionReason
       createdAt
     }
   }
@@ -30,6 +42,10 @@ export const CREATE_PROCUREMENT_REQUEST = gql`
       priority
       status
       neededByDate
+      requestedBy {
+        id
+        name
+      }
       createdAt
     }
   }
@@ -142,6 +158,58 @@ export const RECEIVE_PO_ITEM = gql`
     receivePurchaseOrderItem(input: $input) {
       id
       status
+    }
+  }
+`
+
+export const GET_ACTIVE_USERS = gql`
+  query GetActiveUsers {
+    activeUsers {
+      id
+      name
+      email
+      role
+      department
+      isActive
+    }
+  }
+`
+
+export const GET_USERS = gql`
+  query GetUsers {
+    users {
+      id
+      name
+      email
+      role
+      department
+      isActive
+    }
+  }
+`
+
+export const CREATE_USER = gql`
+  mutation CreateUser($input: CreateUserInput!) {
+    createUser(input: $input) {
+      id
+      name
+      email
+      role
+    }
+  }
+`
+
+export const REVIEW_PROCUREMENT_REQUEST = gql`
+  mutation ReviewProcurementRequest($input: ReviewProcurementRequestInput!) {
+    reviewProcurementRequest(input: $input) {
+      id
+      status
+      approvedBy {
+        id
+        name
+      }
+      approvedAt
+      rejectionReason
     }
   }
 `

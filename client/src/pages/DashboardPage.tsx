@@ -3,9 +3,9 @@ import { useQuery } from '@apollo/client/react'
 import { GET_PROCUREMENT_REQUESTS, GET_PURCHASE_ORDERS, GET_VENDORS } from '../graphql/queries'
 
 export const DashboardPage: React.FC = () => {
-  const { data: reqData, loading: reqLoading } = useQuery(GET_PROCUREMENT_REQUESTS)
-  const { data: poData, loading: poLoading } = useQuery(GET_PURCHASE_ORDERS)
-  const { data: vendorData, loading: vendorLoading } = useQuery(GET_VENDORS)
+  const { data: reqData, loading: reqLoading } = useQuery<any>(GET_PROCUREMENT_REQUESTS)
+  const { data: poData, loading: poLoading } = useQuery<any>(GET_PURCHASE_ORDERS)
+  const { data: vendorData, loading: vendorLoading } = useQuery<any>(GET_VENDORS)
 
   if (reqLoading || poLoading || vendorLoading) {
     return <p>Loading dashboard metrics...</p>

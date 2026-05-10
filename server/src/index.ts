@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import { comparePassword, createToken, verifyToken, requireAuth, requireRole } from './auth.js';
 import dotenv from 'dotenv';
 import { ApolloServer } from '@apollo/server';
 import { expressMiddleware } from '@as-integrations/express5';
@@ -257,7 +259,17 @@ const typeDefs = `#graphql
     notes: String
   }
 
+  type AuthPayload {
+    user: User!
+  }
+
+  input LoginInput {
+    email: String!
+    password: String!
+  }
+
   type Query {
+    me: User
     healthCheck: String!
     users: [User!]!
     activeUsers: [User!]!
@@ -274,6 +286,8 @@ const typeDefs = `#graphql
   }
 
   type Mutation {
+    login(input: LoginInput!): AuthPayload!
+    logout: Boolean!
     createUser(input: CreateUserInput!): User!
     reviewProcurementRequest(input: ReviewProcurementRequestInput!): ProcurementRequest!
     createProcurementRequest(input: CreateProcurementRequestInput!): ProcurementRequest!
@@ -289,6 +303,12 @@ const typeDefs = `#graphql
 const resolvers = {
   Query: {
     healthCheck: () => "Procurement Tracker API is running",
+    me: async (_: any, __: any, context: any) => {
+      if (!context.currentUser) return null;
+      const u = await prisma.user.findUnique({ where: { id: context.currentUser.userId } });
+      if (!u) return null;
+      return { ...u, createdAt: u.createdAt.toISOString(), updatedAt: u.updatedAt.toISOString() };
+    },
     users: async () => {
       const users = await prisma.user.findMany({ orderBy: { name: 'asc' } });
       return users.map(u => ({ ...u, createdAt: u.createdAt.toISOString(), updatedAt: u.updatedAt.toISOString() }));
@@ -506,7 +526,35 @@ const resolvers = {
     }
   },
   Mutation: {
-    createUser: async (_: any, { input }: { input: any }) => {
+    login: async (_: any, { input }: { input: any }, context: any) => {
+      const user = await prisma.user.findUnique({ where: { email: input.email } });
+      if (!user || !user.passwordHash) {
+        throw new Error("Invalid email or password");
+      }
+      
+      const valid = await comparePassword(input.password, user.passwordHash);
+      if (!valid) {
+        throw new Error("Invalid email or password");
+      }
+
+      const token = createToken({ userId: user.id, role: user.role });
+      
+      context.res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      });
+
+      return {
+        user: { ...user, createdAt: user.createdAt.toISOString(), updatedAt: user.updatedAt.toISOString() }
+      };
+    },
+    logout: async (_: any, __: any, context: any) => {
+      context.res.clearCookie('token');
+      return true;
+    },
+    createUser: async (_: any, { input }: { input: any }, context: any) => {
+      requireRole(context.currentUser, ['ADMIN']);
       try {
         const newUser = await prisma.user.create({
           data: {
@@ -521,7 +569,8 @@ const resolvers = {
         throw new Error("Failed to create user.");
       }
     },
-    reviewProcurementRequest: async (_: any, { input }: { input: any }) => {
+    reviewProcurementRequest: async (_: any, { input }: { input: any }, context: any) => {
+      requireRole(context.currentUser, ['ADMIN', 'APPROVER']);
       const req = await prisma.procurementRequest.findUnique({ where: { id: input.id } });
       if (!req) throw new Error("Request not found");
       
@@ -557,7 +606,8 @@ const resolvers = {
         items: updatedRequest.items.map(item => ({ ...item, createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString() }))
       };
     },
-    createProcurementRequest: async (_: any, { input }: { input: any }) => {
+    createProcurementRequest: async (_: any, { input }: { input: any }, context: any) => {
+      requireAuth(context.currentUser);
       try {
         const newRequest = await prisma.procurementRequest.create({
           data: {
@@ -567,7 +617,7 @@ const resolvers = {
             priority: input.priority,
             neededByDate: input.neededByDate ? new Date(input.neededByDate) : null,
             status: 'SUBMITTED',
-            requestedById: input.requestedById || null,
+            requestedById: context.currentUser.userId,
           },
           include: { items: true, requestedBy: true, approvedBy: true }
         });
@@ -586,7 +636,8 @@ const resolvers = {
         throw new Error("Failed to create procurement request in database.");
       }
     },
-    updateProcurementRequestStatus: async (_: any, { id, status }: { id: string, status: any }) => {
+    updateProcurementRequestStatus: async (_: any, { id, status }: { id: string, status: any }, context: any) => {
+      requireRole(context.currentUser, ['ADMIN', 'APPROVER']);
       try {
         const updatedRequest = await prisma.procurementRequest.update({
           where: { id },
@@ -611,7 +662,8 @@ const resolvers = {
         throw new Error("Failed to update procurement request in database.");
       }
     },
-    createVendor: async (_: any, { input }: { input: any }) => {
+    createVendor: async (_: any, { input }: { input: any }, context: any) => {
+      requireRole(context.currentUser, ['ADMIN', 'BUYER']);
       try {
         const newVendor = await prisma.vendor.create({
           data: {
@@ -640,7 +692,8 @@ const resolvers = {
         throw new Error("Failed to create vendor in database.");
       }
     },
-    createRequestItem: async (_: any, { input }: { input: any }) => {
+    createRequestItem: async (_: any, { input }: { input: any }, context: any) => {
+      requireAuth(context.currentUser);
       if (input.quantity <= 0) {
         throw new Error("Quantity must be greater than 0");
       }
@@ -678,7 +731,8 @@ const resolvers = {
         throw new Error("Failed to create request item in database.");
       }
     },
-    createPurchaseOrder: async (_: any, { input }: { input: any }) => {
+    createPurchaseOrder: async (_: any, { input }: { input: any }, context: any) => {
+      requireRole(context.currentUser, ['ADMIN', 'BUYER']);
       const req = await prisma.procurementRequest.findUnique({
         where: { id: input.procurementRequestId },
         include: { items: true, requestedBy: true, approvedBy: true }
@@ -791,7 +845,8 @@ const resolvers = {
         throw new Error("Failed to create Purchase Order in database.");
       }
     },
-    updatePurchaseOrderStatus: async (_: any, { input }: { input: any }) => {
+    updatePurchaseOrderStatus: async (_: any, { input }: { input: any }, context: any) => {
+      requireRole(context.currentUser, ['ADMIN', 'BUYER']);
       try {
         const po = await prisma.purchaseOrder.update({
           where: { id: input.id },
@@ -840,7 +895,8 @@ const resolvers = {
         throw new Error("Failed to update Purchase Order in database.");
       }
     },
-    receivePurchaseOrderItem: async (_: any, { input }: { input: any }) => {
+    receivePurchaseOrderItem: async (_: any, { input }: { input: any }, context: any) => {
+      requireRole(context.currentUser, ['ADMIN', 'RECEIVER']);
       if (input.quantityReceived <= 0) {
         throw new Error("Quantity received must be greater than 0");
       }
@@ -963,9 +1019,19 @@ async function startServer() {
 
   app.use(
     '/graphql',
-    cors<cors.CorsRequest>({ origin: clientUrl }),
+    cors<cors.CorsRequest>({ origin: clientUrl, credentials: true }),
     express.json(),
-    expressMiddleware(server)
+    cookieParser(),
+    expressMiddleware(server, {
+      context: async ({ req, res }) => {
+        const token = req.cookies.token;
+        let currentUser = null;
+        if (token) {
+          currentUser = verifyToken(token);
+        }
+        return { currentUser, req, res };
+      }
+    })
   );
 
   app.listen(port, () => {

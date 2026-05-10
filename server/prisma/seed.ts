@@ -2,6 +2,8 @@ import "dotenv/config";
 import { PrismaClient, VendorType, VendorQualificationStatus, UserRole } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+import bcrypt from "bcryptjs";
+
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -19,11 +21,13 @@ async function main() {
     { name: 'Casey Morgan', email: 'casey.morgan@example.com', role: UserRole.REQUESTER, department: 'Maintenance' },
   ];
 
+  const passwordHash = await bcrypt.hash('DemoPass123!', 10);
+
   for (const u of users) {
     const user = await prisma.user.upsert({
       where: { email: u.email },
-      update: {},
-      create: u,
+      update: { passwordHash },
+      create: { ...u, passwordHash },
     });
     console.log(`Upserted user: ${user.name} (${user.role})`);
   }

@@ -3,8 +3,8 @@ import { useQuery, useMutation } from '@apollo/client/react'
 import { GET_VENDORS, CREATE_VENDOR } from '../graphql/queries'
 
 export const VendorsPage: React.FC = () => {
-  const { data: vendorsData, loading: vendorLoading, error: vendorError } = useQuery(GET_VENDORS)
-  const [createVendor, { loading: createVendorLoading, error: createVendorError }] = useMutation(CREATE_VENDOR, {
+  const { data: vendorsData, loading: vendorLoading, error: vendorError } = useQuery<any>(GET_VENDORS)
+  const [createVendor, { loading: createVendorLoading, error: createVendorError }] = useMutation<any>(CREATE_VENDOR, {
     refetchQueries: [{ query: GET_VENDORS }],
   })
 

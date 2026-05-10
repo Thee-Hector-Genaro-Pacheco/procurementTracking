@@ -1,16 +1,18 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation } from '@apollo/client/react'
 import { GET_PURCHASE_ORDERS, GET_PROCUREMENT_REQUESTS, GET_VENDORS, CREATE_PURCHASE_ORDER, UPDATE_PO_STATUS } from '../graphql/queries'
+import { useUser } from '../contexts/UserContext'
 
 export const PurchaseOrdersPage: React.FC = () => {
-  const { data: poData, loading: poLoading, error: poError } = useQuery(GET_PURCHASE_ORDERS)
-  const { data: reqData } = useQuery(GET_PROCUREMENT_REQUESTS)
-  const { data: vendorsData } = useQuery(GET_VENDORS)
+  const { currentUser } = useUser()
+  const { data: poData, loading: poLoading, error: poError } = useQuery<any>(GET_PURCHASE_ORDERS)
+  const { data: reqData } = useQuery<any>(GET_PROCUREMENT_REQUESTS)
+  const { data: vendorsData } = useQuery<any>(GET_VENDORS)
 
-  const [createPO, { loading: createPOLoading, error: createPOError }] = useMutation(CREATE_PURCHASE_ORDER, {
+  const [createPO, { loading: createPOLoading, error: createPOError }] = useMutation<any>(CREATE_PURCHASE_ORDER, {
     refetchQueries: [{ query: GET_PURCHASE_ORDERS }, { query: GET_PROCUREMENT_REQUESTS }],
   })
-  const [updatePOStatus] = useMutation(UPDATE_PO_STATUS, {
+  const [updatePOStatus] = useMutation<any>(UPDATE_PO_STATUS, {
     refetchQueries: [{ query: GET_PURCHASE_ORDERS }],
   })
 
@@ -64,20 +66,27 @@ export const PurchaseOrdersPage: React.FC = () => {
       <h2>Purchase Orders</h2>
       <div className="form-container" style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--social-bg)', borderRadius: '8px' }}>
         <h3>Create Purchase Order</h3>
+        {!currentUser && <p style={{ color: '#e74c3c' }}>Please select a user to create Purchase Orders.</p>}
+        {currentUser?.role !== 'ADMIN' && currentUser?.role !== 'BUYER' && currentUser && (
+          <p style={{ color: '#e74c3c' }}>Only ADMIN or BUYER can create Purchase Orders.</p>
+        )}
         {createPOError && <p style={{ color: 'red' }}>Error: {createPOError.message}</p>}
         
         <form onSubmit={handlePoSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div style={{ display: 'flex', gap: '1rem' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Procurement Request *</label>
+              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Procurement Request (APPROVED only) *</label>
               <select name="procurementRequestId" value={poFormData.procurementRequestId} onChange={handlePoChange} required style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }}>
-                <option value="" disabled>Select a request</option>
-                {reqData?.procurementRequests?.map((req: any) => (
+                <option value="" disabled>Select an approved request</option>
+                {reqData?.procurementRequests?.filter((req: any) => req.status === 'APPROVED').map((req: any) => (
                   <option key={req.id} value={req.id}>
-                    {req.title} - {req.department} ({req.status})
+                    {req.title} - {req.department}
                   </option>
                 ))}
               </select>
+              {reqData?.procurementRequests?.filter((req: any) => req.status === 'APPROVED').length === 0 && (
+                <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: '#e74c3c' }}>No approved requests available.</p>
+              )}
             </div>
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', marginBottom: '0.5rem' }}>Vendor *</label>
@@ -105,7 +114,7 @@ export const PurchaseOrdersPage: React.FC = () => {
             <label style={{ display: 'block', marginBottom: '0.5rem' }}>Notes</label>
             <textarea name="notes" value={poFormData.notes} onChange={handlePoChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
           </div>
-          <button type="submit" disabled={createPOLoading} style={{ padding: '0.75rem', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem' }}>
+          <button type="submit" disabled={createPOLoading || !currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'BUYER')} style={{ padding: '0.75rem', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem', opacity: (!currentUser || (currentUser.role !== 'ADMIN' && currentUser.role !== 'BUYER')) ? 0.5 : 1 }}>
             {createPOLoading ? 'Creating PO...' : 'Create Purchase Order'}
           </button>
         </form>
