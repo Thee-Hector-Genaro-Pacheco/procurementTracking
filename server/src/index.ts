@@ -49,15 +49,39 @@ const typeDefs = `#graphql
     neededByDate: String
   }
 
+  type Vendor {
+    id: ID!
+    name: String!
+    contactName: String
+    email: String
+    phone: String
+    address: String
+    notes: String
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  input CreateVendorInput {
+    name: String!
+    contactName: String
+    email: String
+    phone: String
+    address: String
+    notes: String
+  }
+
   type Query {
     healthCheck: String!
     procurementRequests: [ProcurementRequest!]!
     procurementRequest(id: ID!): ProcurementRequest
+    vendors: [Vendor!]!
+    vendor(id: ID!): Vendor
   }
 
   type Mutation {
     createProcurementRequest(input: CreateProcurementRequestInput!): ProcurementRequest!
     updateProcurementRequestStatus(id: ID!, status: RequestStatus!): ProcurementRequest!
+    createVendor(input: CreateVendorInput!): Vendor!
   }
 `;
 
@@ -85,6 +109,25 @@ const resolvers = {
         createdAt: req.createdAt.toISOString(),
         updatedAt: req.updatedAt.toISOString(),
         neededByDate: req.neededByDate ? req.neededByDate.toISOString() : null,
+      };
+    },
+    vendors: async () => {
+      const vendors = await prisma.vendor.findMany({
+        orderBy: { createdAt: 'desc' }
+      });
+      return vendors.map(v => ({
+        ...v,
+        createdAt: v.createdAt.toISOString(),
+        updatedAt: v.updatedAt.toISOString(),
+      }));
+    },
+    vendor: async (_: any, { id }: { id: string }) => {
+      const v = await prisma.vendor.findUnique({ where: { id } });
+      if (!v) return null;
+      return {
+        ...v,
+        createdAt: v.createdAt.toISOString(),
+        updatedAt: v.updatedAt.toISOString(),
       };
     }
   },
@@ -132,6 +175,29 @@ const resolvers = {
           throw new Error(`ProcurementRequest with ID ${id} not found.`);
         }
         throw new Error("Failed to update procurement request in database.");
+      }
+    },
+    createVendor: async (_: any, { input }: { input: any }) => {
+      try {
+        const newVendor = await prisma.vendor.create({
+          data: {
+            name: input.name,
+            contactName: input.contactName,
+            email: input.email,
+            phone: input.phone,
+            address: input.address,
+            notes: input.notes,
+          }
+        });
+        console.log(`[Mutation] Created new vendor: ${newVendor.id} - ${newVendor.name}`);
+        return {
+          ...newVendor,
+          createdAt: newVendor.createdAt.toISOString(),
+          updatedAt: newVendor.updatedAt.toISOString(),
+        };
+      } catch (error) {
+        console.error("Error creating vendor:", error);
+        throw new Error("Failed to create vendor in database.");
       }
     }
   }
