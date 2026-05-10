@@ -12,11 +12,11 @@ async function main() {
   console.log('Seeding demo users...');
   
   const users = [
-    { name: 'Hector Pacheco', email: 'hector@example.com', role: UserRole.ADMIN, department: 'Instrumentation' },
-    { name: 'Sarah Mitchell', email: 'sarah@example.com', role: UserRole.APPROVER, department: 'Procurement' },
-    { name: 'Miguel Torres', email: 'miguel@example.com', role: UserRole.BUYER, department: 'Purchasing' },
-    { name: 'Dana Lee', email: 'dana@example.com', role: UserRole.RECEIVER, department: 'Warehouse' },
-    { name: 'Alex Johnson', email: 'alex@example.com', role: UserRole.REQUESTER, department: 'Maintenance' },
+    { name: 'Jordan Reyes', email: 'jordan.reyes@example.com', role: UserRole.ADMIN, department: 'Operations' },
+    { name: 'Morgan Blake', email: 'morgan.blake@example.com', role: UserRole.APPROVER, department: 'Procurement' },
+    { name: 'Taylor Chen', email: 'taylor.chen@example.com', role: UserRole.BUYER, department: 'Purchasing' },
+    { name: 'Riley Brooks', email: 'riley.brooks@example.com', role: UserRole.RECEIVER, department: 'Warehouse' },
+    { name: 'Casey Morgan', email: 'casey.morgan@example.com', role: UserRole.REQUESTER, department: 'Maintenance' },
   ];
 
   for (const u of users) {
