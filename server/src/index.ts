@@ -139,6 +139,18 @@ const typeDefs = `#graphql
     qualificationStatus: VendorQualificationStatus
   }
 
+  type Receipt {
+    id: ID!
+    purchaseOrderId: ID!
+    purchaseOrderItemId: ID!
+    quantityReceived: Int!
+    receivedDate: String!
+    receivedBy: String
+    notes: String
+    createdAt: String!
+    updatedAt: String!
+  }
+
   type PurchaseOrderItem {
     id: ID!
     purchaseOrderId: ID!
@@ -152,6 +164,10 @@ const typeDefs = `#graphql
     partNumber: String
     manufacturer: String
     notes: String
+    receipts: [Receipt!]!
+    quantityReceived: Int!
+    quantityRemaining: Int!
+    isFullyReceived: Boolean!
     createdAt: String!
     updatedAt: String!
   }
@@ -169,6 +185,7 @@ const typeDefs = `#graphql
     subtotal: Float!
     notes: String
     items: [PurchaseOrderItem!]!
+    receipts: [Receipt!]!
     createdAt: String!
     updatedAt: String!
   }
@@ -186,6 +203,15 @@ const typeDefs = `#graphql
     status: PurchaseOrderStatus!
   }
 
+  input ReceivePurchaseOrderItemInput {
+    purchaseOrderId: ID!
+    purchaseOrderItemId: ID!
+    quantityReceived: Int!
+    receivedDate: String
+    receivedBy: String
+    notes: String
+  }
+
   type Query {
     healthCheck: String!
     procurementRequests: [ProcurementRequest!]!
@@ -194,6 +220,8 @@ const typeDefs = `#graphql
     vendor(id: ID!): Vendor
     purchaseOrders: [PurchaseOrder!]!
     purchaseOrder(id: ID!): PurchaseOrder
+    receipts: [Receipt!]!
+    receiptsByPurchaseOrder(purchaseOrderId: ID!): [Receipt!]!
   }
 
   type Mutation {
@@ -203,6 +231,7 @@ const typeDefs = `#graphql
     createRequestItem(input: CreateRequestItemInput!): RequestItem!
     createPurchaseOrder(input: CreatePurchaseOrderInput!): PurchaseOrder!
     updatePurchaseOrderStatus(input: UpdatePurchaseOrderStatusInput!): PurchaseOrder!
+    receivePurchaseOrderItem(input: ReceivePurchaseOrderItemInput!): PurchaseOrder!
   }
 `;
 
@@ -267,7 +296,12 @@ const resolvers = {
     },
     purchaseOrders: async () => {
       const pos = await prisma.purchaseOrder.findMany({
-        include: { procurementRequest: true, vendor: true, items: true },
+        include: { 
+          procurementRequest: true, 
+          vendor: true, 
+          items: { include: { receipts: true } },
+          receipts: true
+        },
         orderBy: { createdAt: 'desc' }
       });
       return pos.map(po => ({
@@ -287,17 +321,40 @@ const resolvers = {
           createdAt: po.vendor.createdAt.toISOString(),
           updatedAt: po.vendor.updatedAt.toISOString(),
         },
-        items: po.items.map((item: any) => ({
-          ...item,
-          createdAt: item.createdAt.toISOString(),
-          updatedAt: item.updatedAt.toISOString(),
-        }))
+        items: po.items.map((item: any) => {
+          const qtyRec = item.receipts ? item.receipts.reduce((sum: number, r: any) => sum + r.quantityReceived, 0) : 0;
+          return {
+            ...item,
+            receipts: item.receipts ? item.receipts.map((r: any) => ({
+              ...r,
+              receivedDate: r.receivedDate.toISOString(),
+              createdAt: r.createdAt.toISOString(),
+              updatedAt: r.updatedAt.toISOString(),
+            })) : [],
+            quantityReceived: qtyRec,
+            quantityRemaining: item.quantity - qtyRec,
+            isFullyReceived: qtyRec >= item.quantity,
+            createdAt: item.createdAt.toISOString(),
+            updatedAt: item.updatedAt.toISOString(),
+          }
+        }),
+        receipts: po.receipts ? po.receipts.map((r: any) => ({
+          ...r,
+          receivedDate: r.receivedDate.toISOString(),
+          createdAt: r.createdAt.toISOString(),
+          updatedAt: r.updatedAt.toISOString(),
+        })) : []
       }));
     },
     purchaseOrder: async (_: any, { id }: { id: string }) => {
       const po = await prisma.purchaseOrder.findUnique({
         where: { id },
-        include: { procurementRequest: true, vendor: true, items: true }
+        include: { 
+          procurementRequest: true, 
+          vendor: true, 
+          items: { include: { receipts: true } },
+          receipts: true
+        }
       });
       if (!po) return null;
       return {
@@ -317,12 +374,38 @@ const resolvers = {
           createdAt: po.vendor.createdAt.toISOString(),
           updatedAt: po.vendor.updatedAt.toISOString(),
         },
-        items: po.items.map((item: any) => ({
-          ...item,
-          createdAt: item.createdAt.toISOString(),
-          updatedAt: item.updatedAt.toISOString(),
-        }))
+        items: po.items.map((item: any) => {
+          const qtyRec = item.receipts ? item.receipts.reduce((sum: number, r: any) => sum + r.quantityReceived, 0) : 0;
+          return {
+            ...item,
+            receipts: item.receipts ? item.receipts.map((r: any) => ({
+              ...r,
+              receivedDate: r.receivedDate.toISOString(),
+              createdAt: r.createdAt.toISOString(),
+              updatedAt: r.updatedAt.toISOString(),
+            })) : [],
+            quantityReceived: qtyRec,
+            quantityRemaining: item.quantity - qtyRec,
+            isFullyReceived: qtyRec >= item.quantity,
+            createdAt: item.createdAt.toISOString(),
+            updatedAt: item.updatedAt.toISOString(),
+          }
+        }),
+        receipts: po.receipts ? po.receipts.map((r: any) => ({
+          ...r,
+          receivedDate: r.receivedDate.toISOString(),
+          createdAt: r.createdAt.toISOString(),
+          updatedAt: r.updatedAt.toISOString(),
+        })) : []
       };
+    },
+    receipts: async () => {
+      const recs = await prisma.receipt.findMany({ orderBy: { receivedDate: 'desc' }});
+      return recs.map(r => ({ ...r, receivedDate: r.receivedDate.toISOString(), createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }));
+    },
+    receiptsByPurchaseOrder: async (_: any, { purchaseOrderId }: { purchaseOrderId: string }) => {
+      const recs = await prisma.receipt.findMany({ where: { purchaseOrderId }, orderBy: { receivedDate: 'desc' }});
+      return recs.map(r => ({ ...r, receivedDate: r.receivedDate.toISOString(), createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }));
     }
   },
   Mutation: {
@@ -580,6 +663,116 @@ const resolvers = {
         }
         throw new Error("Failed to update Purchase Order in database.");
       }
+    },
+    receivePurchaseOrderItem: async (_: any, { input }: { input: any }) => {
+      if (input.quantityReceived <= 0) {
+        throw new Error("Quantity received must be greater than 0");
+      }
+
+      const po = await prisma.purchaseOrder.findUnique({
+        where: { id: input.purchaseOrderId },
+        include: { items: { include: { receipts: true } } }
+      });
+
+      if (!po) throw new Error("Purchase Order not found.");
+
+      const item = po.items.find(i => i.id === input.purchaseOrderItemId);
+      if (!item) throw new Error("Purchase Order Item not found.");
+
+      const currentReceived = item.receipts.reduce((sum, r) => sum + r.quantityReceived, 0);
+      if (currentReceived + input.quantityReceived > item.quantity) {
+        throw new Error("Cannot receive more than the ordered quantity.");
+      }
+
+      await prisma.receipt.create({
+        data: {
+          purchaseOrderId: input.purchaseOrderId,
+          purchaseOrderItemId: input.purchaseOrderItemId,
+          quantityReceived: input.quantityReceived,
+          receivedDate: input.receivedDate ? new Date(input.receivedDate) : new Date(),
+          receivedBy: input.receivedBy,
+          notes: input.notes
+        }
+      });
+
+      const updatedPo = await prisma.purchaseOrder.findUnique({
+        where: { id: input.purchaseOrderId },
+        include: { items: { include: { receipts: true } } }
+      });
+
+      let allFullyReceived = true;
+      if (updatedPo && updatedPo.items) {
+        for (const i of updatedPo.items) {
+          const rec = i.receipts.reduce((sum, r) => sum + r.quantityReceived, 0);
+          if (rec < i.quantity) {
+            allFullyReceived = false;
+          }
+        }
+      }
+
+      const newStatus = allFullyReceived ? 'RECEIVED' : 'PARTIALLY_RECEIVED';
+
+      const finalPo = await prisma.purchaseOrder.update({
+        where: { id: input.purchaseOrderId },
+        data: { status: newStatus },
+        include: { 
+          procurementRequest: true, 
+          vendor: true, 
+          items: { include: { receipts: true } },
+          receipts: true
+        }
+      });
+
+      if (allFullyReceived) {
+        await prisma.procurementRequest.update({
+          where: { id: finalPo.procurementRequestId },
+          data: { status: 'RECEIVED' }
+        });
+      }
+
+      console.log(`[Mutation] Received ${input.quantityReceived} items for PO ${finalPo.poNumber}. Status: ${newStatus}`);
+
+      return {
+        ...finalPo,
+        orderDate: finalPo.orderDate ? finalPo.orderDate.toISOString() : null,
+        expectedDeliveryDate: finalPo.expectedDeliveryDate ? finalPo.expectedDeliveryDate.toISOString() : null,
+        createdAt: finalPo.createdAt.toISOString(),
+        updatedAt: finalPo.updatedAt.toISOString(),
+        procurementRequest: {
+          ...finalPo.procurementRequest,
+          createdAt: finalPo.procurementRequest.createdAt.toISOString(),
+          updatedAt: finalPo.procurementRequest.updatedAt.toISOString(),
+          neededByDate: finalPo.procurementRequest.neededByDate ? finalPo.procurementRequest.neededByDate.toISOString() : null,
+        },
+        vendor: {
+          ...finalPo.vendor,
+          createdAt: finalPo.vendor.createdAt.toISOString(),
+          updatedAt: finalPo.vendor.updatedAt.toISOString(),
+        },
+        items: finalPo.items.map((i: any) => {
+          const qtyRec = i.receipts ? i.receipts.reduce((sum: number, r: any) => sum + r.quantityReceived, 0) : 0;
+          return {
+            ...i,
+            receipts: i.receipts ? i.receipts.map((r: any) => ({
+              ...r,
+              receivedDate: r.receivedDate.toISOString(),
+              createdAt: r.createdAt.toISOString(),
+              updatedAt: r.updatedAt.toISOString(),
+            })) : [],
+            quantityReceived: qtyRec,
+            quantityRemaining: i.quantity - qtyRec,
+            isFullyReceived: qtyRec >= i.quantity,
+            createdAt: i.createdAt.toISOString(),
+            updatedAt: i.updatedAt.toISOString(),
+          }
+        }),
+        receipts: finalPo.receipts ? finalPo.receipts.map((r: any) => ({
+          ...r,
+          receivedDate: r.receivedDate.toISOString(),
+          createdAt: r.createdAt.toISOString(),
+          updatedAt: r.updatedAt.toISOString(),
+        })) : []
+      };
     }
   }
 };
