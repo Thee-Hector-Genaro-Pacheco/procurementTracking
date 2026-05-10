@@ -42,17 +42,28 @@ enum VendorQualificationStatus {
   INACTIVE
 }
 
+enum PurchaseOrderStatus {
+  DRAFT
+  ISSUED
+  ACKNOWLEDGED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+  CLOSED
+}
+
 model ProcurementRequest {
-  id           String        @id @default(uuid())
+  id           String          @id @default(uuid())
   title        String
   description  String?
   department   String
   priority     Priority
-  status       RequestStatus @default(SUBMITTED)
+  status       RequestStatus   @default(SUBMITTED)
   neededByDate DateTime?
   items        RequestItem[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  purchaseOrders PurchaseOrder[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 }
 
 model RequestItem {
@@ -85,6 +96,42 @@ model Vendor {
   specialties         String[]
   isPreferred         Boolean                   @default(false)
   qualificationStatus VendorQualificationStatus @default(UNREVIEWED)
+  purchaseOrders      PurchaseOrder[]
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
+}
+
+model PurchaseOrder {
+  id                   String              @id @default(uuid())
+  poNumber             String              @unique
+  procurementRequestId String
+  procurementRequest   ProcurementRequest  @relation(fields: [procurementRequestId], references: [id], onDelete: Cascade)
+  vendorId             String
+  vendor               Vendor              @relation(fields: [vendorId], references: [id])
+  status               PurchaseOrderStatus @default(DRAFT)
+  orderDate            DateTime?
+  expectedDeliveryDate DateTime?
+  subtotal             Float               @default(0)
+  notes                String?
+  items                PurchaseOrderItem[]
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+}
+
+model PurchaseOrderItem {
+  id              String         @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder  @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  requestItemId   String?
+  itemName        String
+  description     String?
+  quantity        Int
+  unitOfMeasure   String?
+  unitCost        Float?
+  lineTotal       Float?
+  partNumber      String?
+  manufacturer    String?
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 }

@@ -48,6 +48,16 @@ const typeDefs = `#graphql
     INACTIVE
   }
 
+  enum PurchaseOrderStatus {
+    DRAFT
+    ISSUED
+    ACKNOWLEDGED
+    PARTIALLY_RECEIVED
+    RECEIVED
+    CANCELLED
+    CLOSED
+  }
+
   type RequestItem {
     id: ID!
     procurementRequestId: ID!
@@ -129,12 +139,61 @@ const typeDefs = `#graphql
     qualificationStatus: VendorQualificationStatus
   }
 
+  type PurchaseOrderItem {
+    id: ID!
+    purchaseOrderId: ID!
+    requestItemId: ID
+    itemName: String!
+    description: String
+    quantity: Int!
+    unitOfMeasure: String
+    unitCost: Float
+    lineTotal: Float
+    partNumber: String
+    manufacturer: String
+    notes: String
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type PurchaseOrder {
+    id: ID!
+    poNumber: String!
+    procurementRequestId: ID!
+    procurementRequest: ProcurementRequest!
+    vendorId: ID!
+    vendor: Vendor!
+    status: PurchaseOrderStatus!
+    orderDate: String
+    expectedDeliveryDate: String
+    subtotal: Float!
+    notes: String
+    items: [PurchaseOrderItem!]!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  input CreatePurchaseOrderInput {
+    procurementRequestId: ID!
+    vendorId: ID!
+    orderDate: String
+    expectedDeliveryDate: String
+    notes: String
+  }
+
+  input UpdatePurchaseOrderStatusInput {
+    id: ID!
+    status: PurchaseOrderStatus!
+  }
+
   type Query {
     healthCheck: String!
     procurementRequests: [ProcurementRequest!]!
     procurementRequest(id: ID!): ProcurementRequest
     vendors: [Vendor!]!
     vendor(id: ID!): Vendor
+    purchaseOrders: [PurchaseOrder!]!
+    purchaseOrder(id: ID!): PurchaseOrder
   }
 
   type Mutation {
@@ -142,6 +201,8 @@ const typeDefs = `#graphql
     updateProcurementRequestStatus(id: ID!, status: RequestStatus!): ProcurementRequest!
     createVendor(input: CreateVendorInput!): Vendor!
     createRequestItem(input: CreateRequestItemInput!): RequestItem!
+    createPurchaseOrder(input: CreatePurchaseOrderInput!): PurchaseOrder!
+    updatePurchaseOrderStatus(input: UpdatePurchaseOrderStatusInput!): PurchaseOrder!
   }
 `;
 
@@ -202,6 +263,65 @@ const resolvers = {
         ...v,
         createdAt: v.createdAt.toISOString(),
         updatedAt: v.updatedAt.toISOString(),
+      };
+    },
+    purchaseOrders: async () => {
+      const pos = await prisma.purchaseOrder.findMany({
+        include: { procurementRequest: true, vendor: true, items: true },
+        orderBy: { createdAt: 'desc' }
+      });
+      return pos.map(po => ({
+        ...po,
+        orderDate: po.orderDate ? po.orderDate.toISOString() : null,
+        expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.toISOString() : null,
+        createdAt: po.createdAt.toISOString(),
+        updatedAt: po.updatedAt.toISOString(),
+        procurementRequest: {
+          ...po.procurementRequest,
+          createdAt: po.procurementRequest.createdAt.toISOString(),
+          updatedAt: po.procurementRequest.updatedAt.toISOString(),
+          neededByDate: po.procurementRequest.neededByDate ? po.procurementRequest.neededByDate.toISOString() : null,
+        },
+        vendor: {
+          ...po.vendor,
+          createdAt: po.vendor.createdAt.toISOString(),
+          updatedAt: po.vendor.updatedAt.toISOString(),
+        },
+        items: po.items.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.updatedAt.toISOString(),
+        }))
+      }));
+    },
+    purchaseOrder: async (_: any, { id }: { id: string }) => {
+      const po = await prisma.purchaseOrder.findUnique({
+        where: { id },
+        include: { procurementRequest: true, vendor: true, items: true }
+      });
+      if (!po) return null;
+      return {
+        ...po,
+        orderDate: po.orderDate ? po.orderDate.toISOString() : null,
+        expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.toISOString() : null,
+        createdAt: po.createdAt.toISOString(),
+        updatedAt: po.updatedAt.toISOString(),
+        procurementRequest: {
+          ...po.procurementRequest,
+          createdAt: po.procurementRequest.createdAt.toISOString(),
+          updatedAt: po.procurementRequest.updatedAt.toISOString(),
+          neededByDate: po.procurementRequest.neededByDate ? po.procurementRequest.neededByDate.toISOString() : null,
+        },
+        vendor: {
+          ...po.vendor,
+          createdAt: po.vendor.createdAt.toISOString(),
+          updatedAt: po.vendor.updatedAt.toISOString(),
+        },
+        items: po.items.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.updatedAt.toISOString(),
+        }))
       };
     }
   },
@@ -316,6 +436,149 @@ const resolvers = {
       } catch (error) {
         console.error("Error creating request item:", error);
         throw new Error("Failed to create request item in database.");
+      }
+    },
+    createPurchaseOrder: async (_: any, { input }: { input: any }) => {
+      const req = await prisma.procurementRequest.findUnique({
+        where: { id: input.procurementRequestId },
+        include: { items: true }
+      });
+
+      if (!req) {
+        throw new Error(`ProcurementRequest with ID ${input.procurementRequestId} not found.`);
+      }
+
+      if (req.items.length === 0) {
+        throw new Error(`ProcurementRequest must have at least one line item to generate a Purchase Order.`);
+      }
+
+      const vendor = await prisma.vendor.findUnique({
+        where: { id: input.vendorId }
+      });
+
+      if (!vendor) {
+        throw new Error(`Vendor with ID ${input.vendorId} not found.`);
+      }
+
+      const timestamp = new Date();
+      const poNumber = `PO-${timestamp.getFullYear()}${String(timestamp.getMonth() + 1).padStart(2, '0')}${String(timestamp.getDate()).padStart(2, '0')}-${String(timestamp.getHours()).padStart(2, '0')}${String(timestamp.getMinutes()).padStart(2, '0')}${String(timestamp.getSeconds()).padStart(2, '0')}`;
+
+      const poItems = req.items.map(item => {
+        const unitCost = item.estimatedUnitCost ?? null;
+        const lineTotal = unitCost !== null ? unitCost * item.quantity : null;
+        return {
+          requestItemId: item.id,
+          itemName: item.itemName,
+          description: item.description,
+          quantity: item.quantity,
+          unitOfMeasure: item.unitOfMeasure,
+          unitCost,
+          lineTotal,
+          partNumber: item.partNumber,
+          manufacturer: item.manufacturer,
+          notes: item.notes,
+        };
+      });
+
+      let subtotal = 0;
+      for (const item of poItems) {
+        if (item.lineTotal !== null) {
+          subtotal += item.lineTotal;
+        }
+      }
+
+      try {
+        const newPO = await prisma.purchaseOrder.create({
+          data: {
+            poNumber,
+            procurementRequestId: input.procurementRequestId,
+            vendorId: input.vendorId,
+            status: 'DRAFT',
+            orderDate: input.orderDate ? new Date(input.orderDate) : null,
+            expectedDeliveryDate: input.expectedDeliveryDate ? new Date(input.expectedDeliveryDate) : null,
+            subtotal,
+            notes: input.notes,
+            items: {
+              create: poItems
+            }
+          },
+          include: { procurementRequest: true, vendor: true, items: true }
+        });
+
+        await prisma.procurementRequest.update({
+          where: { id: input.procurementRequestId },
+          data: { status: 'ORDERED' }
+        });
+
+        console.log(`[Mutation] Created new PO: ${newPO.poNumber}`);
+
+        return {
+          ...newPO,
+          orderDate: newPO.orderDate ? newPO.orderDate.toISOString() : null,
+          expectedDeliveryDate: newPO.expectedDeliveryDate ? newPO.expectedDeliveryDate.toISOString() : null,
+          createdAt: newPO.createdAt.toISOString(),
+          updatedAt: newPO.updatedAt.toISOString(),
+          procurementRequest: {
+            ...newPO.procurementRequest,
+            createdAt: newPO.procurementRequest.createdAt.toISOString(),
+            updatedAt: newPO.procurementRequest.updatedAt.toISOString(),
+            neededByDate: newPO.procurementRequest.neededByDate ? newPO.procurementRequest.neededByDate.toISOString() : null,
+          },
+          vendor: {
+            ...newPO.vendor,
+            createdAt: newPO.vendor.createdAt.toISOString(),
+            updatedAt: newPO.vendor.updatedAt.toISOString(),
+          },
+          items: newPO.items.map((item: any) => ({
+            ...item,
+            createdAt: item.createdAt.toISOString(),
+            updatedAt: item.updatedAt.toISOString(),
+          }))
+        };
+      } catch (error) {
+        console.error("Error creating PO:", error);
+        throw new Error("Failed to create Purchase Order in database.");
+      }
+    },
+    updatePurchaseOrderStatus: async (_: any, { input }: { input: any }) => {
+      try {
+        const po = await prisma.purchaseOrder.update({
+          where: { id: input.id },
+          data: { status: input.status },
+          include: { procurementRequest: true, vendor: true, items: true }
+        });
+
+        console.log(`[Mutation] Updated PO ${po.poNumber} status to ${input.status}`);
+
+        return {
+          ...po,
+          orderDate: po.orderDate ? po.orderDate.toISOString() : null,
+          expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.toISOString() : null,
+          createdAt: po.createdAt.toISOString(),
+          updatedAt: po.updatedAt.toISOString(),
+          procurementRequest: {
+            ...po.procurementRequest,
+            createdAt: po.procurementRequest.createdAt.toISOString(),
+            updatedAt: po.procurementRequest.updatedAt.toISOString(),
+            neededByDate: po.procurementRequest.neededByDate ? po.procurementRequest.neededByDate.toISOString() : null,
+          },
+          vendor: {
+            ...po.vendor,
+            createdAt: po.vendor.createdAt.toISOString(),
+            updatedAt: po.vendor.updatedAt.toISOString(),
+          },
+          items: po.items.map((item: any) => ({
+            ...item,
+            createdAt: item.createdAt.toISOString(),
+            updatedAt: item.updatedAt.toISOString(),
+          }))
+        };
+      } catch (error: any) {
+        console.error("Error updating PO status:", error);
+        if (error.code === 'P2025') {
+          throw new Error(`PurchaseOrder with ID ${input.id} not found.`);
+        }
+        throw new Error("Failed to update Purchase Order in database.");
       }
     }
   }
