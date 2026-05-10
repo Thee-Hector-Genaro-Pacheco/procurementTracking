@@ -12,6 +12,19 @@ const port = process.env.PORT || 4000;
 const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 
 const typeDefs = `#graphql
+  enum UserRole {
+    ADMIN
+    REQUESTER
+    APPROVER
+    BUYER
+    RECEIVER
+  }
+
+  enum ApprovalDecision {
+    APPROVE
+    REJECT
+    UNDER_REVIEW
+  }
   enum RequestStatus {
     DRAFT
     SUBMITTED
@@ -82,6 +95,23 @@ const typeDefs = `#graphql
     status: RequestStatus!
     neededByDate: String
     items: [RequestItem!]!
+    requestedById: ID
+    requestedBy: User
+    approvedById: ID
+    approvedBy: User
+    approvedAt: String
+    rejectionReason: String
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type User {
+    id: ID!
+    name: String!
+    email: String!
+    role: UserRole!
+    department: String
+    isActive: Boolean!
     createdAt: String!
     updatedAt: String!
   }
@@ -92,6 +122,21 @@ const typeDefs = `#graphql
     department: String!
     priority: Priority!
     neededByDate: String
+    requestedById: ID
+  }
+
+  input CreateUserInput {
+    name: String!
+    email: String!
+    role: UserRole!
+    department: String
+  }
+
+  input ReviewProcurementRequestInput {
+    id: ID!
+    approverId: ID!
+    decision: ApprovalDecision!
+    rejectionReason: String
   }
 
   input CreateRequestItemInput {
@@ -214,6 +259,10 @@ const typeDefs = `#graphql
 
   type Query {
     healthCheck: String!
+    users: [User!]!
+    activeUsers: [User!]!
+    user(id: ID!): User
+    pendingApprovalRequests: [ProcurementRequest!]!
     procurementRequests: [ProcurementRequest!]!
     procurementRequest(id: ID!): ProcurementRequest
     vendors: [Vendor!]!
@@ -225,6 +274,8 @@ const typeDefs = `#graphql
   }
 
   type Mutation {
+    createUser(input: CreateUserInput!): User!
+    reviewProcurementRequest(input: ReviewProcurementRequestInput!): ProcurementRequest!
     createProcurementRequest(input: CreateProcurementRequestInput!): ProcurementRequest!
     updateProcurementRequestStatus(id: ID!, status: RequestStatus!): ProcurementRequest!
     createVendor(input: CreateVendorInput!): Vendor!
@@ -238,9 +289,23 @@ const typeDefs = `#graphql
 const resolvers = {
   Query: {
     healthCheck: () => "Procurement Tracker API is running",
-    procurementRequests: async () => {
+    users: async () => {
+      const users = await prisma.user.findMany({ orderBy: { name: 'asc' } });
+      return users.map(u => ({ ...u, createdAt: u.createdAt.toISOString(), updatedAt: u.updatedAt.toISOString() }));
+    },
+    activeUsers: async () => {
+      const users = await prisma.user.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } });
+      return users.map(u => ({ ...u, createdAt: u.createdAt.toISOString(), updatedAt: u.updatedAt.toISOString() }));
+    },
+    user: async (_: any, { id }: { id: string }) => {
+      const u = await prisma.user.findUnique({ where: { id } });
+      if (!u) return null;
+      return { ...u, createdAt: u.createdAt.toISOString(), updatedAt: u.updatedAt.toISOString() };
+    },
+    pendingApprovalRequests: async () => {
       const requests = await prisma.procurementRequest.findMany({
-        include: { items: true },
+        where: { status: { in: ['SUBMITTED', 'UNDER_REVIEW'] } },
+        include: { items: true, requestedBy: true, approvedBy: true },
         orderBy: { createdAt: 'desc' }
       });
       return requests.map(req => ({
@@ -248,6 +313,29 @@ const resolvers = {
         createdAt: req.createdAt.toISOString(),
         updatedAt: req.updatedAt.toISOString(),
         neededByDate: req.neededByDate ? req.neededByDate.toISOString() : null,
+        approvedAt: req.approvedAt ? req.approvedAt.toISOString() : null,
+        requestedBy: req.requestedBy ? { ...req.requestedBy, createdAt: req.requestedBy.createdAt.toISOString(), updatedAt: req.requestedBy.updatedAt.toISOString() } : null,
+        approvedBy: req.approvedBy ? { ...req.approvedBy, createdAt: req.approvedBy.createdAt.toISOString(), updatedAt: req.approvedBy.updatedAt.toISOString() } : null,
+        items: req.items.map(item => ({
+          ...item,
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.updatedAt.toISOString(),
+        }))
+      }));
+    },
+    procurementRequests: async () => {
+      const requests = await prisma.procurementRequest.findMany({
+        include: { items: true, requestedBy: true, approvedBy: true },
+        orderBy: { createdAt: 'desc' }
+      });
+      return requests.map(req => ({
+        ...req,
+        createdAt: req.createdAt.toISOString(),
+        updatedAt: req.updatedAt.toISOString(),
+        neededByDate: req.neededByDate ? req.neededByDate.toISOString() : null,
+        approvedAt: req.approvedAt ? req.approvedAt.toISOString() : null,
+        requestedBy: req.requestedBy ? { ...req.requestedBy, createdAt: req.requestedBy.createdAt.toISOString(), updatedAt: req.requestedBy.updatedAt.toISOString() } : null,
+        approvedBy: req.approvedBy ? { ...req.approvedBy, createdAt: req.approvedBy.createdAt.toISOString(), updatedAt: req.approvedBy.updatedAt.toISOString() } : null,
         items: req.items.map(item => ({
           ...item,
           createdAt: item.createdAt.toISOString(),
@@ -260,7 +348,7 @@ const resolvers = {
     procurementRequest: async (_: any, { id }: { id: string }) => {
       const req = await prisma.procurementRequest.findUnique({
         where: { id },
-        include: { items: true }
+        include: { items: true, requestedBy: true, approvedBy: true }
       });
       if (!req) return null;
       return {
@@ -268,6 +356,9 @@ const resolvers = {
         createdAt: req.createdAt.toISOString(),
         updatedAt: req.updatedAt.toISOString(),
         neededByDate: req.neededByDate ? req.neededByDate.toISOString() : null,
+        approvedAt: req.approvedAt ? req.approvedAt.toISOString() : null,
+        requestedBy: req.requestedBy ? { ...req.requestedBy, createdAt: req.requestedBy.createdAt.toISOString(), updatedAt: req.requestedBy.updatedAt.toISOString() } : null,
+        approvedBy: req.approvedBy ? { ...req.approvedBy, createdAt: req.approvedBy.createdAt.toISOString(), updatedAt: req.approvedBy.updatedAt.toISOString() } : null,
         items: req.items.map(item => ({
           ...item,
           createdAt: item.createdAt.toISOString(),
@@ -297,7 +388,7 @@ const resolvers = {
     purchaseOrders: async () => {
       const pos = await prisma.purchaseOrder.findMany({
         include: { 
-          procurementRequest: true, 
+          procurementRequest: { include: { requestedBy: true, approvedBy: true } }, 
           vendor: true, 
           items: { include: { receipts: true } },
           receipts: true
@@ -315,6 +406,9 @@ const resolvers = {
           createdAt: po.procurementRequest.createdAt.toISOString(),
           updatedAt: po.procurementRequest.updatedAt.toISOString(),
           neededByDate: po.procurementRequest.neededByDate ? po.procurementRequest.neededByDate.toISOString() : null,
+            approvedAt: po.procurementRequest.approvedAt ? po.procurementRequest.approvedAt.toISOString() : null,
+            requestedBy: po.procurementRequest.requestedBy ? { ...po.procurementRequest.requestedBy, createdAt: po.procurementRequest.requestedBy.createdAt.toISOString(), updatedAt: po.procurementRequest.requestedBy.updatedAt.toISOString() } : null,
+            approvedBy: po.procurementRequest.approvedBy ? { ...po.procurementRequest.approvedBy, createdAt: po.procurementRequest.approvedBy.createdAt.toISOString(), updatedAt: po.procurementRequest.approvedBy.updatedAt.toISOString() } : null,
         },
         vendor: {
           ...po.vendor,
@@ -350,7 +444,7 @@ const resolvers = {
       const po = await prisma.purchaseOrder.findUnique({
         where: { id },
         include: { 
-          procurementRequest: true, 
+          procurementRequest: { include: { requestedBy: true, approvedBy: true } }, 
           vendor: true, 
           items: { include: { receipts: true } },
           receipts: true
@@ -368,6 +462,9 @@ const resolvers = {
           createdAt: po.procurementRequest.createdAt.toISOString(),
           updatedAt: po.procurementRequest.updatedAt.toISOString(),
           neededByDate: po.procurementRequest.neededByDate ? po.procurementRequest.neededByDate.toISOString() : null,
+            approvedAt: po.procurementRequest.approvedAt ? po.procurementRequest.approvedAt.toISOString() : null,
+            requestedBy: po.procurementRequest.requestedBy ? { ...po.procurementRequest.requestedBy, createdAt: po.procurementRequest.requestedBy.createdAt.toISOString(), updatedAt: po.procurementRequest.requestedBy.updatedAt.toISOString() } : null,
+            approvedBy: po.procurementRequest.approvedBy ? { ...po.procurementRequest.approvedBy, createdAt: po.procurementRequest.approvedBy.createdAt.toISOString(), updatedAt: po.procurementRequest.approvedBy.updatedAt.toISOString() } : null,
         },
         vendor: {
           ...po.vendor,
@@ -409,6 +506,57 @@ const resolvers = {
     }
   },
   Mutation: {
+    createUser: async (_: any, { input }: { input: any }) => {
+      try {
+        const newUser = await prisma.user.create({
+          data: {
+            name: input.name,
+            email: input.email,
+            role: input.role,
+            department: input.department,
+          }
+        });
+        return { ...newUser, createdAt: newUser.createdAt.toISOString(), updatedAt: newUser.updatedAt.toISOString() };
+      } catch (error) {
+        throw new Error("Failed to create user.");
+      }
+    },
+    reviewProcurementRequest: async (_: any, { input }: { input: any }) => {
+      const req = await prisma.procurementRequest.findUnique({ where: { id: input.id } });
+      if (!req) throw new Error("Request not found");
+      
+      const approver = await prisma.user.findUnique({ where: { id: input.approverId } });
+      if (!approver) throw new Error("Approver not found");
+      if (approver.role !== 'ADMIN' && approver.role !== 'APPROVER') {
+        throw new Error("User does not have permission to approve requests");
+      }
+
+      let data: any = {};
+      if (input.decision === 'UNDER_REVIEW') {
+        data = { status: 'UNDER_REVIEW', approvedById: null, approvedAt: null, rejectionReason: null };
+      } else if (input.decision === 'APPROVE') {
+        data = { status: 'APPROVED', approvedById: input.approverId, approvedAt: new Date(), rejectionReason: null };
+      } else if (input.decision === 'REJECT') {
+        data = { status: 'REJECTED', approvedById: input.approverId, approvedAt: new Date(), rejectionReason: input.rejectionReason };
+      }
+
+      const updatedRequest = await prisma.procurementRequest.update({
+        where: { id: input.id },
+        data,
+        include: { items: true, requestedBy: true, approvedBy: true }
+      });
+
+      return {
+        ...updatedRequest,
+        createdAt: updatedRequest.createdAt.toISOString(),
+        updatedAt: updatedRequest.updatedAt.toISOString(),
+        neededByDate: updatedRequest.neededByDate ? updatedRequest.neededByDate.toISOString() : null,
+        approvedAt: updatedRequest.approvedAt ? updatedRequest.approvedAt.toISOString() : null,
+        requestedBy: updatedRequest.requestedBy ? { ...updatedRequest.requestedBy, createdAt: updatedRequest.requestedBy.createdAt.toISOString(), updatedAt: updatedRequest.requestedBy.updatedAt.toISOString() } : null,
+        approvedBy: updatedRequest.approvedBy ? { ...updatedRequest.approvedBy, createdAt: updatedRequest.approvedBy.createdAt.toISOString(), updatedAt: updatedRequest.approvedBy.updatedAt.toISOString() } : null,
+        items: updatedRequest.items.map(item => ({ ...item, createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString() }))
+      };
+    },
     createProcurementRequest: async (_: any, { input }: { input: any }) => {
       try {
         const newRequest = await prisma.procurementRequest.create({
@@ -419,7 +567,9 @@ const resolvers = {
             priority: input.priority,
             neededByDate: input.neededByDate ? new Date(input.neededByDate) : null,
             status: 'SUBMITTED',
-          }
+            requestedById: input.requestedById || null,
+          },
+          include: { items: true, requestedBy: true, approvedBy: true }
         });
         console.log(`[Mutation] Created new procurement request: ${newRequest.id} - ${newRequest.title}`);
         return {
@@ -427,6 +577,9 @@ const resolvers = {
           createdAt: newRequest.createdAt.toISOString(),
           updatedAt: newRequest.updatedAt.toISOString(),
           neededByDate: newRequest.neededByDate ? newRequest.neededByDate.toISOString() : null,
+          approvedAt: newRequest.approvedAt ? newRequest.approvedAt.toISOString() : null,
+          requestedBy: newRequest.requestedBy ? { ...newRequest.requestedBy, createdAt: newRequest.requestedBy.createdAt.toISOString(), updatedAt: newRequest.requestedBy.updatedAt.toISOString() } : null,
+          approvedBy: newRequest.approvedBy ? { ...newRequest.approvedBy, createdAt: newRequest.approvedBy.createdAt.toISOString(), updatedAt: newRequest.approvedBy.updatedAt.toISOString() } : null,
         };
       } catch (error) {
         console.error("Error creating procurement request:", error);
@@ -437,7 +590,8 @@ const resolvers = {
       try {
         const updatedRequest = await prisma.procurementRequest.update({
           where: { id },
-          data: { status }
+          data: { status },
+          include: { items: true, requestedBy: true, approvedBy: true }
         });
         console.log(`[Mutation] Updated procurement request ${id} status to ${status}`);
         return {
@@ -445,6 +599,9 @@ const resolvers = {
           createdAt: updatedRequest.createdAt.toISOString(),
           updatedAt: updatedRequest.updatedAt.toISOString(),
           neededByDate: updatedRequest.neededByDate ? updatedRequest.neededByDate.toISOString() : null,
+          approvedAt: updatedRequest.approvedAt ? updatedRequest.approvedAt.toISOString() : null,
+          requestedBy: updatedRequest.requestedBy ? { ...updatedRequest.requestedBy, createdAt: updatedRequest.requestedBy.createdAt.toISOString(), updatedAt: updatedRequest.requestedBy.updatedAt.toISOString() } : null,
+          approvedBy: updatedRequest.approvedBy ? { ...updatedRequest.approvedBy, createdAt: updatedRequest.approvedBy.createdAt.toISOString(), updatedAt: updatedRequest.approvedBy.updatedAt.toISOString() } : null,
         };
       } catch (error: any) {
         console.error("Error updating procurement request:", error);
@@ -524,7 +681,7 @@ const resolvers = {
     createPurchaseOrder: async (_: any, { input }: { input: any }) => {
       const req = await prisma.procurementRequest.findUnique({
         where: { id: input.procurementRequestId },
-        include: { items: true }
+        include: { items: true, requestedBy: true, approvedBy: true }
       });
 
       if (!req) {
@@ -533,6 +690,9 @@ const resolvers = {
 
       if (req.items.length === 0) {
         throw new Error(`ProcurementRequest must have at least one line item to generate a Purchase Order.`);
+      }
+      if (req.status !== 'APPROVED') {
+        throw new Error(`Cannot create Purchase Order: ProcurementRequest is not APPROVED.`);
       }
 
       const vendor = await prisma.vendor.findUnique({
@@ -586,7 +746,7 @@ const resolvers = {
             }
           },
           include: { 
-            procurementRequest: true, 
+            procurementRequest: { include: { requestedBy: true, approvedBy: true } }, 
             vendor: true, 
             items: { include: { receipts: true } },
             receipts: true
@@ -611,6 +771,9 @@ const resolvers = {
             createdAt: newPO.procurementRequest.createdAt.toISOString(),
             updatedAt: newPO.procurementRequest.updatedAt.toISOString(),
             neededByDate: newPO.procurementRequest.neededByDate ? newPO.procurementRequest.neededByDate.toISOString() : null,
+            approvedAt: newPO.procurementRequest.approvedAt ? newPO.procurementRequest.approvedAt.toISOString() : null,
+            requestedBy: newPO.procurementRequest.requestedBy ? { ...newPO.procurementRequest.requestedBy, createdAt: newPO.procurementRequest.requestedBy.createdAt.toISOString(), updatedAt: newPO.procurementRequest.requestedBy.updatedAt.toISOString() } : null,
+            approvedBy: newPO.procurementRequest.approvedBy ? { ...newPO.procurementRequest.approvedBy, createdAt: newPO.procurementRequest.approvedBy.createdAt.toISOString(), updatedAt: newPO.procurementRequest.approvedBy.updatedAt.toISOString() } : null,
           },
           vendor: {
             ...newPO.vendor,
@@ -634,7 +797,7 @@ const resolvers = {
           where: { id: input.id },
           data: { status: input.status },
           include: { 
-            procurementRequest: true, 
+            procurementRequest: { include: { requestedBy: true, approvedBy: true } }, 
             vendor: true, 
             items: { include: { receipts: true } },
             receipts: true
@@ -654,6 +817,9 @@ const resolvers = {
             createdAt: po.procurementRequest.createdAt.toISOString(),
             updatedAt: po.procurementRequest.updatedAt.toISOString(),
             neededByDate: po.procurementRequest.neededByDate ? po.procurementRequest.neededByDate.toISOString() : null,
+            approvedAt: po.procurementRequest.approvedAt ? po.procurementRequest.approvedAt.toISOString() : null,
+            requestedBy: po.procurementRequest.requestedBy ? { ...po.procurementRequest.requestedBy, createdAt: po.procurementRequest.requestedBy.createdAt.toISOString(), updatedAt: po.procurementRequest.requestedBy.updatedAt.toISOString() } : null,
+            approvedBy: po.procurementRequest.approvedBy ? { ...po.procurementRequest.approvedBy, createdAt: po.procurementRequest.approvedBy.createdAt.toISOString(), updatedAt: po.procurementRequest.approvedBy.updatedAt.toISOString() } : null,
           },
           vendor: {
             ...po.vendor,
@@ -726,7 +892,7 @@ const resolvers = {
         where: { id: input.purchaseOrderId },
         data: { status: newStatus },
         include: { 
-          procurementRequest: true, 
+          procurementRequest: { include: { requestedBy: true, approvedBy: true } }, 
           vendor: true, 
           items: { include: { receipts: true } },
           receipts: true

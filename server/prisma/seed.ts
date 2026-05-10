@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { PrismaClient, VendorType, VendorQualificationStatus } from "@prisma/client";
+import { PrismaClient, VendorType, VendorQualificationStatus, UserRole } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
@@ -9,6 +9,25 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
+  console.log('Seeding demo users...');
+  
+  const users = [
+    { name: 'Hector Pacheco', email: 'hector@example.com', role: UserRole.ADMIN, department: 'Instrumentation' },
+    { name: 'Sarah Mitchell', email: 'sarah@example.com', role: UserRole.APPROVER, department: 'Procurement' },
+    { name: 'Miguel Torres', email: 'miguel@example.com', role: UserRole.BUYER, department: 'Purchasing' },
+    { name: 'Dana Lee', email: 'dana@example.com', role: UserRole.RECEIVER, department: 'Warehouse' },
+    { name: 'Alex Johnson', email: 'alex@example.com', role: UserRole.REQUESTER, department: 'Maintenance' },
+  ];
+
+  for (const u of users) {
+    const user = await prisma.user.upsert({
+      where: { email: u.email },
+      update: {},
+      create: u,
+    });
+    console.log(`Upserted user: ${user.name} (${user.role})`);
+  }
+
   console.log('Seeding demo vendors...');
 
   const vendors = [

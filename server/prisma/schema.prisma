@@ -24,6 +24,14 @@ enum RequestStatus {
   CLOSED
 }
 
+enum UserRole {
+  ADMIN
+  REQUESTER
+  APPROVER
+  BUYER
+  RECEIVER
+}
+
 enum VendorType {
   MANUFACTURER
   DISTRIBUTOR
@@ -60,10 +68,30 @@ model ProcurementRequest {
   priority     Priority
   status       RequestStatus   @default(SUBMITTED)
   neededByDate DateTime?
-  items        RequestItem[]
-  purchaseOrders PurchaseOrder[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  requestedById   String?
+  requestedBy     User?           @relation("RequestRequestedBy", fields: [requestedById], references: [id])
+  approvedById    String?
+  approvedBy      User?           @relation("RequestApprovedBy", fields: [approvedById], references: [id])
+  approvedAt      DateTime?
+  rejectionReason String?
+  items           RequestItem[]
+  purchaseOrders  PurchaseOrder[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model User {
+  id          String   @id @default(uuid())
+  name        String
+  email       String   @unique
+  role        UserRole @default(REQUESTER)
+  department  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requestsRequested ProcurementRequest[] @relation("RequestRequestedBy")
+  requestsApproved  ProcurementRequest[] @relation("RequestApprovedBy")
 }
 
 model RequestItem {
