@@ -18,6 +18,13 @@ const GET_PROCUREMENT_REQUESTS = gql`
       priority
       status
       neededByDate
+      items {
+        id
+        itemName
+        quantity
+        partNumber
+        estimatedUnitCost
+      }
       createdAt
     }
   }
@@ -33,6 +40,18 @@ const CREATE_PROCUREMENT_REQUEST = gql`
       status
       neededByDate
       createdAt
+    }
+  }
+`
+
+const CREATE_REQUEST_ITEM = gql`
+  mutation CreateRequestItem($input: CreateRequestItemInput!) {
+    createRequestItem(input: $input) {
+      id
+      itemName
+      quantity
+      partNumber
+      estimatedUnitCost
     }
   }
 `
@@ -91,6 +110,10 @@ function App() {
     refetchQueries: [{ query: GET_VENDORS }],
   })
 
+  const [createRequestItem, { loading: createItemLoading, error: createItemError }] = useMutation(CREATE_REQUEST_ITEM, {
+    refetchQueries: [{ query: GET_PROCUREMENT_REQUESTS }],
+  })
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -114,6 +137,18 @@ function App() {
     qualificationStatus: 'UNREVIEWED',
   })
 
+  const [itemFormData, setItemFormData] = useState({
+    procurementRequestId: '',
+    itemName: '',
+    description: '',
+    quantity: 1,
+    unitOfMeasure: '',
+    estimatedUnitCost: '',
+    partNumber: '',
+    manufacturer: '',
+    notes: '',
+  })
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
@@ -121,6 +156,10 @@ function App() {
   const handleVendorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const value = e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value;
     setVendorFormData({ ...vendorFormData, [e.target.name]: value })
+  }
+
+  const handleItemChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    setItemFormData({ ...itemFormData, [e.target.name]: e.target.value })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -164,6 +203,31 @@ function App() {
       })
     } catch (err) {
       console.error("Failed to create vendor", err)
+    }
+  }
+
+  const handleItemSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const input = {
+        ...itemFormData,
+        quantity: parseInt(itemFormData.quantity.toString(), 10),
+        estimatedUnitCost: itemFormData.estimatedUnitCost ? parseFloat(itemFormData.estimatedUnitCost) : null,
+      }
+      await createRequestItem({ variables: { input } })
+      setItemFormData({
+        procurementRequestId: '',
+        itemName: '',
+        description: '',
+        quantity: 1,
+        unitOfMeasure: '',
+        estimatedUnitCost: '',
+        partNumber: '',
+        manufacturer: '',
+        notes: '',
+      })
+    } catch (err) {
+      console.error("Failed to create request item", err)
     }
   }
 
@@ -231,10 +295,27 @@ function App() {
                 <span style={{ padding: '0.25rem 0.5rem', background: 'var(--code-bg)', borderRadius: '4px', fontSize: '0.85rem' }}>{req.status}</span>
               </div>
               <p style={{ margin: '0 0 0.5rem 0', color: 'var(--text)' }}>Department: {req.department}</p>
-              <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem', color: 'var(--text)' }}>
+              <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem', color: 'var(--text)', marginBottom: '1rem' }}>
                 <span>Priority: {req.priority}</span>
                 <span>Needed: {req.neededByDate ? new Date(req.neededByDate).toLocaleDateString() : 'Not specified'}</span>
                 <span>Created: {new Date(req.createdAt).toLocaleDateString()}</span>
+              </div>
+              
+              <div style={{ padding: '1rem', background: 'var(--social-bg)', borderRadius: '6px' }}>
+                <h4 style={{ margin: '0 0 0.5rem 0' }}>Line Items</h4>
+                {req.items && req.items.length > 0 ? (
+                  <ul style={{ margin: 0, paddingLeft: '1.5rem', fontSize: '0.9rem' }}>
+                    {req.items.map((item: any) => (
+                      <li key={item.id} style={{ marginBottom: '0.25rem' }}>
+                        <strong>{item.quantity}x {item.itemName}</strong> 
+                        {item.partNumber && ` (PN: ${item.partNumber})`}
+                        {item.estimatedUnitCost && ` - $${item.estimatedUnitCost}/ea`}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text)' }}>No items added yet.</p>
+                )}
               </div>
             </div>
           ))}
@@ -242,6 +323,60 @@ function App() {
       </div>
 
       <hr style={{ margin: '3rem 0', border: 'none', borderTop: '1px solid var(--border)' }} />
+
+      <div className="form-container" style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--social-bg)', borderRadius: '8px' }}>
+        <h2>Add Line Item to Request</h2>
+        {createItemError && <p style={{ color: 'red' }}>Error: {createItemError.message}</p>}
+        
+        <form onSubmit={handleItemSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Procurement Request *</label>
+            <select name="procurementRequestId" value={itemFormData.procurementRequestId} onChange={handleItemChange} required style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }}>
+              <option value="" disabled>Select a request</option>
+              {data?.procurementRequests?.map((req: any) => (
+                <option key={req.id} value={req.id}>{req.title}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ flex: 2 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Item Name *</label>
+              <input name="itemName" value={itemFormData.itemName} onChange={handleItemChange} required style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Quantity *</label>
+              <input type="number" name="quantity" min="1" value={itemFormData.quantity} onChange={handleItemChange} required style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Unit of Measure</label>
+              <input name="unitOfMeasure" value={itemFormData.unitOfMeasure} onChange={handleItemChange} placeholder="e.g., EA, PKG, BOX" style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Est. Unit Cost ($)</label>
+              <input type="number" step="0.01" name="estimatedUnitCost" value={itemFormData.estimatedUnitCost} onChange={handleItemChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Part Number</label>
+              <input name="partNumber" value={itemFormData.partNumber} onChange={handleItemChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Manufacturer</label>
+              <input name="manufacturer" value={itemFormData.manufacturer} onChange={handleItemChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
+            </div>
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Description / Notes</label>
+            <textarea name="description" value={itemFormData.description} onChange={handleItemChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
+          </div>
+          <button type="submit" disabled={createItemLoading} style={{ padding: '0.75rem', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem' }}>
+            {createItemLoading ? 'Adding...' : 'Add Item'}
+          </button>
+        </form>
+      </div>
 
       {/* VENDOR MANAGEMENT SECTION */}
       <h2>Vendor Management</h2>

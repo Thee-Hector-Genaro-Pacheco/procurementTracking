@@ -48,6 +48,21 @@ const typeDefs = `#graphql
     INACTIVE
   }
 
+  type RequestItem {
+    id: ID!
+    procurementRequestId: ID!
+    itemName: String!
+    description: String
+    quantity: Int!
+    unitOfMeasure: String
+    estimatedUnitCost: Float
+    partNumber: String
+    manufacturer: String
+    notes: String
+    createdAt: String!
+    updatedAt: String!
+  }
+
   type ProcurementRequest {
     id: ID!
     title: String!
@@ -56,7 +71,9 @@ const typeDefs = `#graphql
     priority: Priority!
     status: RequestStatus!
     neededByDate: String
+    items: [RequestItem!]!
     createdAt: String!
+    updatedAt: String!
   }
 
   input CreateProcurementRequestInput {
@@ -65,6 +82,18 @@ const typeDefs = `#graphql
     department: String!
     priority: Priority!
     neededByDate: String
+  }
+
+  input CreateRequestItemInput {
+    procurementRequestId: ID!
+    itemName: String!
+    description: String
+    quantity: Int!
+    unitOfMeasure: String
+    estimatedUnitCost: Float
+    partNumber: String
+    manufacturer: String
+    notes: String
   }
 
   type Vendor {
@@ -112,6 +141,7 @@ const typeDefs = `#graphql
     createProcurementRequest(input: CreateProcurementRequestInput!): ProcurementRequest!
     updateProcurementRequestStatus(id: ID!, status: RequestStatus!): ProcurementRequest!
     createVendor(input: CreateVendorInput!): Vendor!
+    createRequestItem(input: CreateRequestItemInput!): RequestItem!
   }
 `;
 
@@ -120,6 +150,7 @@ const resolvers = {
     healthCheck: () => "Procurement Tracker API is running",
     procurementRequests: async () => {
       const requests = await prisma.procurementRequest.findMany({
+        include: { items: true },
         orderBy: { createdAt: 'desc' }
       });
       return requests.map(req => ({
@@ -127,18 +158,31 @@ const resolvers = {
         createdAt: req.createdAt.toISOString(),
         updatedAt: req.updatedAt.toISOString(),
         neededByDate: req.neededByDate ? req.neededByDate.toISOString() : null,
+        items: req.items.map(item => ({
+          ...item,
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.updatedAt.toISOString(),
+        }))
       }));
     },
 
-    
+
     procurementRequest: async (_: any, { id }: { id: string }) => {
-      const req = await prisma.procurementRequest.findUnique({ where: { id } });
+      const req = await prisma.procurementRequest.findUnique({
+        where: { id },
+        include: { items: true }
+      });
       if (!req) return null;
       return {
         ...req,
         createdAt: req.createdAt.toISOString(),
         updatedAt: req.updatedAt.toISOString(),
         neededByDate: req.neededByDate ? req.neededByDate.toISOString() : null,
+        items: req.items.map(item => ({
+          ...item,
+          createdAt: item.createdAt.toISOString(),
+          updatedAt: item.updatedAt.toISOString(),
+        }))
       };
     },
     vendors: async () => {
@@ -234,6 +278,44 @@ const resolvers = {
       } catch (error) {
         console.error("Error creating vendor:", error);
         throw new Error("Failed to create vendor in database.");
+      }
+    },
+    createRequestItem: async (_: any, { input }: { input: any }) => {
+      if (input.quantity <= 0) {
+        throw new Error("Quantity must be greater than 0");
+      }
+
+      const reqExists = await prisma.procurementRequest.findUnique({
+        where: { id: input.procurementRequestId }
+      });
+
+      if (!reqExists) {
+        throw new Error(`ProcurementRequest with ID ${input.procurementRequestId} not found.`);
+      }
+
+      try {
+        const newItem = await prisma.requestItem.create({
+          data: {
+            procurementRequestId: input.procurementRequestId,
+            itemName: input.itemName,
+            description: input.description,
+            quantity: input.quantity,
+            unitOfMeasure: input.unitOfMeasure,
+            estimatedUnitCost: input.estimatedUnitCost,
+            partNumber: input.partNumber,
+            manufacturer: input.manufacturer,
+            notes: input.notes,
+          }
+        });
+        console.log(`[Mutation] Created new request item: ${newItem.id} for request ${newItem.procurementRequestId}`);
+        return {
+          ...newItem,
+          createdAt: newItem.createdAt.toISOString(),
+          updatedAt: newItem.updatedAt.toISOString(),
+        };
+      } catch (error) {
+        console.error("Error creating request item:", error);
+        throw new Error("Failed to create request item in database.");
       }
     }
   }

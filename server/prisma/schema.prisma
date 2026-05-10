@@ -50,8 +50,25 @@ model ProcurementRequest {
   priority     Priority
   status       RequestStatus @default(SUBMITTED)
   neededByDate DateTime?
+  items        RequestItem[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+}
+
+model RequestItem {
+  id                   String             @id @default(uuid())
+  procurementRequestId String
+  procurementRequest   ProcurementRequest @relation(fields: [procurementRequestId], references: [id], onDelete: Cascade)
+  itemName             String
+  description          String?
+  quantity             Int
+  unitOfMeasure        String?
+  estimatedUnitCost    Float?
+  partNumber           String?
+  manufacturer         String?
+  notes                String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 }
 
 model Vendor {
