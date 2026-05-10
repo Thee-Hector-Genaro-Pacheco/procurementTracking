@@ -24,6 +24,24 @@ enum RequestStatus {
   CLOSED
 }
 
+enum VendorType {
+  MANUFACTURER
+  DISTRIBUTOR
+  SERVICE_PROVIDER
+  CALIBRATION_LAB
+  CONTRACTOR
+  OEM
+  OTHER
+}
+
+enum VendorQualificationStatus {
+  UNREVIEWED
+  APPROVED
+  PREFERRED
+  RESTRICTED
+  INACTIVE
+}
+
 model ProcurementRequest {
   id           String        @id @default(uuid())
   title        String
@@ -37,13 +55,19 @@ model ProcurementRequest {
 }
 
 model Vendor {
-  id          String   @id @default(uuid())
-  name        String
-  contactName String?
-  email       String?
-  phone       String?
-  address     String?
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  String                    @id @default(uuid())
+  name                String                    @unique
+  contactName         String?
+  email               String?
+  phone               String?
+  address             String?
+  notes               String?
+  website             String?
+  vendorType          VendorType                @default(OTHER)
+  industries          String[]
+  specialties         String[]
+  isPreferred         Boolean                   @default(false)
+  qualificationStatus VendorQualificationStatus @default(UNREVIEWED)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
 }

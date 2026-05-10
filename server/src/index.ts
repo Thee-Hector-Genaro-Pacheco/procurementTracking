@@ -30,6 +30,24 @@ const typeDefs = `#graphql
     URGENT
   }
 
+  enum VendorType {
+    MANUFACTURER
+    DISTRIBUTOR
+    SERVICE_PROVIDER
+    CALIBRATION_LAB
+    CONTRACTOR
+    OEM
+    OTHER
+  }
+
+  enum VendorQualificationStatus {
+    UNREVIEWED
+    APPROVED
+    PREFERRED
+    RESTRICTED
+    INACTIVE
+  }
+
   type ProcurementRequest {
     id: ID!
     title: String!
@@ -57,6 +75,12 @@ const typeDefs = `#graphql
     phone: String
     address: String
     notes: String
+    website: String
+    vendorType: VendorType!
+    industries: [String!]!
+    specialties: [String!]!
+    isPreferred: Boolean!
+    qualificationStatus: VendorQualificationStatus!
     createdAt: String!
     updatedAt: String!
   }
@@ -68,6 +92,12 @@ const typeDefs = `#graphql
     phone: String
     address: String
     notes: String
+    website: String
+    vendorType: VendorType
+    industries: [String!]
+    specialties: [String!]
+    isPreferred: Boolean
+    qualificationStatus: VendorQualificationStatus
   }
 
   type Query {
@@ -187,6 +217,12 @@ const resolvers = {
             phone: input.phone,
             address: input.address,
             notes: input.notes,
+            website: input.website,
+            vendorType: input.vendorType || 'OTHER',
+            industries: input.industries || [],
+            specialties: input.specialties || [],
+            isPreferred: input.isPreferred ?? false,
+            qualificationStatus: input.qualificationStatus || 'UNREVIEWED',
           }
         });
         console.log(`[Mutation] Created new vendor: ${newVendor.id} - ${newVendor.name}`);

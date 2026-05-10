@@ -28,6 +28,10 @@ A full-stack application built with React, Vite, Node.js, Express, Apollo GraphQ
    cd server
    npm run prisma:migrate
    ```
+   To seed the database with demo vendors (including I&C and Nuclear specific vendors):
+   ```bash
+   npm run prisma:seed
+   ```
    To view and manage your data, you can open Prisma Studio:
    ```bash
    npm run prisma:studio

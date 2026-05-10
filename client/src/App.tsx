@@ -47,6 +47,12 @@ const GET_VENDORS = gql`
       phone
       address
       notes
+      website
+      vendorType
+      industries
+      specialties
+      isPreferred
+      qualificationStatus
       createdAt
     }
   }
@@ -62,6 +68,12 @@ const CREATE_VENDOR = gql`
       phone
       address
       notes
+      website
+      vendorType
+      industries
+      specialties
+      isPreferred
+      qualificationStatus
       createdAt
     }
   }
@@ -94,14 +106,21 @@ function App() {
     phone: '',
     address: '',
     notes: '',
+    website: '',
+    vendorType: 'OTHER',
+    industries: '',
+    specialties: '',
+    isPreferred: false,
+    qualificationStatus: 'UNREVIEWED',
   })
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  const handleVendorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setVendorFormData({ ...vendorFormData, [e.target.name]: e.target.value })
+  const handleVendorChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const value = e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value;
+    setVendorFormData({ ...vendorFormData, [e.target.name]: value })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -123,7 +142,12 @@ function App() {
   const handleVendorSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await createVendor({ variables: { input: vendorFormData } })
+      const input = {
+        ...vendorFormData,
+        industries: vendorFormData.industries ? vendorFormData.industries.split(',').map(s => s.trim()).filter(Boolean) : [],
+        specialties: vendorFormData.specialties ? vendorFormData.specialties.split(',').map(s => s.trim()).filter(Boolean) : [],
+      }
+      await createVendor({ variables: { input } })
       setVendorFormData({
         name: '',
         contactName: '',
@@ -131,6 +155,12 @@ function App() {
         phone: '',
         address: '',
         notes: '',
+        website: '',
+        vendorType: 'OTHER',
+        industries: '',
+        specialties: '',
+        isPreferred: false,
+        qualificationStatus: 'UNREVIEWED',
       })
     } catch (err) {
       console.error("Failed to create vendor", err)
@@ -240,6 +270,50 @@ function App() {
               <input name="phone" value={vendorFormData.phone} onChange={handleVendorChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
             </div>
           </div>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Website</label>
+              <input type="url" name="website" value={vendorFormData.website} onChange={handleVendorChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Vendor Type</label>
+              <select name="vendorType" value={vendorFormData.vendorType} onChange={handleVendorChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }}>
+                <option value="MANUFACTURER">Manufacturer</option>
+                <option value="DISTRIBUTOR">Distributor</option>
+                <option value="SERVICE_PROVIDER">Service Provider</option>
+                <option value="CALIBRATION_LAB">Calibration Lab</option>
+                <option value="CONTRACTOR">Contractor</option>
+                <option value="OEM">OEM</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Industries (comma-separated)</label>
+              <input name="industries" value={vendorFormData.industries} onChange={handleVendorChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} placeholder="Nuclear, Medical, Industrial..." />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Specialties (comma-separated)</label>
+              <input name="specialties" value={vendorFormData.specialties} onChange={handleVendorChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} placeholder="Radiation monitoring, pumps..." />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Qualification Status</label>
+              <select name="qualificationStatus" value={vendorFormData.qualificationStatus} onChange={handleVendorChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }}>
+                <option value="UNREVIEWED">Unreviewed</option>
+                <option value="APPROVED">Approved</option>
+                <option value="PREFERRED">Preferred</option>
+                <option value="RESTRICTED">Restricted</option>
+                <option value="INACTIVE">Inactive</option>
+              </select>
+            </div>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1.5rem' }}>
+              <input type="checkbox" name="isPreferred" id="isPreferred" checked={vendorFormData.isPreferred} onChange={handleVendorChange} />
+              <label htmlFor="isPreferred">Preferred Vendor</label>
+            </div>
+          </div>
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem' }}>Address</label>
             <input name="address" value={vendorFormData.address} onChange={handleVendorChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
@@ -264,12 +338,22 @@ function App() {
         <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
           {vendorsData?.vendors?.map((v: any) => (
             <div key={v.id} className="vendor-card" style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', textAlign: 'left' }}>
-              <h4 style={{ margin: '0 0 0.5rem 0' }}>{v.name}</h4>
-              {v.contactName && <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.9rem' }}>Contact: {v.contactName}</p>}
-              {v.email && <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.9rem' }}>Email: {v.email}</p>}
-              {v.phone && <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.9rem' }}>Phone: {v.phone}</p>}
-              {v.address && <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.9rem' }}>Address: {v.address}</p>}
-              {v.notes && <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', fontStyle: 'italic', color: 'var(--text)' }}>Notes: {v.notes}</p>}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                <h4 style={{ margin: '0' }}>{v.name}</h4>
+                {v.isPreferred && <span style={{ padding: '0.2rem 0.4rem', background: 'gold', color: 'black', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>★ PREFERRED</span>}
+              </div>
+              <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem' }}>
+                <span style={{ padding: '0.2rem 0.4rem', background: 'var(--code-bg)', borderRadius: '4px' }}>{v.vendorType}</span>
+                <span style={{ padding: '0.2rem 0.4rem', marginLeft: '0.5rem', background: v.qualificationStatus === 'APPROVED' ? '#4caf50' : v.qualificationStatus === 'UNREVIEWED' ? 'gray' : 'var(--code-bg)', color: v.qualificationStatus === 'APPROVED' ? 'white' : 'inherit', borderRadius: '4px' }}>{v.qualificationStatus}</span>
+              </p>
+              {v.industries?.length > 0 && <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem' }}><strong>Industries:</strong> {v.industries.join(', ')}</p>}
+              {v.specialties?.length > 0 && <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem' }}><strong>Specialties:</strong> {v.specialties.join(', ')}</p>}
+              {v.contactName && <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem' }}>Contact: {v.contactName}</p>}
+              {v.email && <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem' }}>Email: {v.email}</p>}
+              {v.phone && <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem' }}>Phone: {v.phone}</p>}
+              {v.website && <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem' }}>Website: <a href={v.website} target="_blank" rel="noreferrer">{v.website}</a></p>}
+              {v.address && <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.85rem' }}>Address: {v.address}</p>}
+              {v.notes && <p style={{ margin: '0.5rem 0', fontSize: '0.85rem', fontStyle: 'italic', color: 'var(--text)' }}>Notes: {v.notes}</p>}
               <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text)' }}>
                 Added: {new Date(v.createdAt).toLocaleDateString()}
               </div>
