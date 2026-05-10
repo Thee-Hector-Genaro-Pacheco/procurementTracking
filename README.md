@@ -20,10 +20,18 @@ A full-stack application built with React, Vite, Node.js, Express, Apollo GraphQ
    cd server
    cp .env.example .env
    ```
-   Update the `DATABASE_URL` if necessary.
+   **Important:** You must configure the `DATABASE_URL` in `.env` to point to your running PostgreSQL database.
 
 3. **Database Setup:**
-   *(Note: Migrations have not been run yet in Phase 1.)*
+   Run the Prisma migrations to initialize the database schema in PostgreSQL:
+   ```bash
+   cd server
+   npm run prisma:migrate
+   ```
+   To view and manage your data, you can open Prisma Studio:
+   ```bash
+   npm run prisma:studio
+   ```
 
 ## Running the Application
 

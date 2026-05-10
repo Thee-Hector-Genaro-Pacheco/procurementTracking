@@ -6,11 +6,32 @@ datasource db {
   provider = "postgresql"
 }
 
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum RequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  ORDERED
+  RECEIVED
+  CLOSED
+}
+
 model ProcurementRequest {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String?
-  status      String   @default("PENDING")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String        @id @default(uuid())
+  title        String
+  description  String?
+  department   String
+  priority     Priority
+  status       RequestStatus @default(SUBMITTED)
+  neededByDate DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }

@@ -39,7 +39,7 @@ const CREATE_PROCUREMENT_REQUEST = gql`
 
 function App() {
   const { loading: healthLoading, error: healthError, data: healthData } = useQuery<{ healthCheck: string }>(HEALTH_CHECK)
-  const { loading, error, data } = useQuery(GET_PROCUREMENT_REQUESTS)
+  const { loading, error, data } = useQuery<{ procurementRequests: any[] }>(GET_PROCUREMENT_REQUESTS)
   const [createRequest, { loading: createLoading, error: createError }] = useMutation(CREATE_PROCUREMENT_REQUEST, {
     refetchQueries: [{ query: GET_PROCUREMENT_REQUESTS }],
   })
