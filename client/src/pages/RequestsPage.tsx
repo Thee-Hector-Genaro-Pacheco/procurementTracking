@@ -2,10 +2,17 @@ import React, { useState } from 'react'
 import { useQuery, useMutation } from '@apollo/client/react'
 import { GET_PROCUREMENT_REQUESTS, CREATE_PROCUREMENT_REQUEST, CREATE_REQUEST_ITEM, REVIEW_PROCUREMENT_REQUEST } from '../graphql/queries'
 import { useUser } from '../contexts/UserContext'
+import { Card } from '../components/ui/Card'
+import { PageHeader } from '../components/ui/PageHeader'
+import { FormField } from '../components/ui/FormField'
+import { Button } from '../components/ui/Button'
+import { StatusBadge } from '../components/shared/StatusBadge'
+import { LoadingState } from '../components/shared/LoadingState'
+import { EmptyState } from '../components/ui/EmptyState'
 
-export const RequestsPage: React.FC = () => {
+export const RequestsPage = () => {
   const { currentUser } = useUser();
-  const { loading, error, data } = useQuery<any>(GET_PROCUREMENT_REQUESTS)
+  const { loading, data } = useQuery<any>(GET_PROCUREMENT_REQUESTS)
   const [createProcurementRequest, { loading: createLoading, error: createError }] = useMutation<any>(CREATE_PROCUREMENT_REQUEST, {
     refetchQueries: [{ query: GET_PROCUREMENT_REQUESTS }],
   })
@@ -16,36 +23,13 @@ export const RequestsPage: React.FC = () => {
     refetchQueries: [{ query: GET_PROCUREMENT_REQUESTS }],
   })
 
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    department: '',
-    priority: 'MEDIUM',
-    neededByDate: '',
-  })
-
-  const [itemFormData, setItemFormData] = useState({
-    procurementRequestId: '',
-    itemName: '',
-    description: '',
-    quantity: 1,
-    unitOfMeasure: '',
-    estimatedUnitCost: '',
-    partNumber: '',
-    manufacturer: '',
-    notes: '',
-  })
-
+  const [formData, setFormData] = useState({ title: '', description: '', department: '', priority: 'MEDIUM', neededByDate: '' })
+  const [itemFormData, setItemFormData] = useState({ procurementRequestId: '', itemName: '', description: '', quantity: 1, unitOfMeasure: '', estimatedUnitCost: '', partNumber: '', manufacturer: '', notes: '' })
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [rejectionReason, setRejectionReason] = useState<{ [key: string]: string }>({});
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
-  }
-
-  const handleItemChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setItemFormData({ ...itemFormData, [e.target.name]: e.target.value })
-  }
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setFormData({ ...formData, [e.target.name]: e.target.value })
+  const handleItemChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setItemFormData({ ...itemFormData, [e.target.name]: e.target.value })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -56,16 +40,8 @@ export const RequestsPage: React.FC = () => {
         requestedById: currentUser?.id || null,
       }
       await createProcurementRequest({ variables: { input } })
-      setFormData({
-        title: '',
-        description: '',
-        department: '',
-        priority: 'MEDIUM',
-        neededByDate: '',
-      })
-    } catch (err) {
-      console.error("Failed to create request", err)
-    }
+      setFormData({ title: '', description: '', department: '', priority: 'MEDIUM', neededByDate: '' })
+    } catch (err) {}
   }
 
   const handleItemSubmit = async (e: React.FormEvent) => {
@@ -77,255 +53,229 @@ export const RequestsPage: React.FC = () => {
         estimatedUnitCost: itemFormData.estimatedUnitCost ? parseFloat(itemFormData.estimatedUnitCost) : null,
       }
       await createRequestItem({ variables: { input } })
-      setItemFormData({
-        procurementRequestId: '',
-        itemName: '',
-        description: '',
-        quantity: 1,
-        unitOfMeasure: '',
-        estimatedUnitCost: '',
-        partNumber: '',
-        manufacturer: '',
-        notes: '',
-      })
-    } catch (err) {
-      console.error("Failed to create request item", err)
-    }
+      setItemFormData({ procurementRequestId: '', itemName: '', description: '', quantity: 1, unitOfMeasure: '', estimatedUnitCost: '', partNumber: '', manufacturer: '', notes: '' })
+    } catch (err) {}
   }
 
-  const handleReview = async (id: string, decision: string) => {
-    if (!currentUser) return;
+  const handleReview = async (id: string, status: string) => {
     try {
-      await reviewRequest({
-        variables: {
-          input: {
-            id,
-            approverId: currentUser.id,
-            decision,
-            rejectionReason: decision === 'REJECT' ? rejectionReason[id] : null,
-          }
-        }
-      });
-      if (decision === 'REJECT') {
-        setRejectionReason({ ...rejectionReason, [id]: '' });
-      }
-    } catch (err) {
-      console.error("Failed to review request", err);
-    }
+      await reviewRequest({ variables: { input: { id, status, rejectionReason: rejectionReason[id] || null } } })
+    } catch (err) {}
   }
 
-  const filteredRequests = data?.procurementRequests?.filter((req: any) => statusFilter === 'ALL' || req.status === statusFilter) || []
-
-  const canApprove = currentUser?.role === 'ADMIN' || currentUser?.role === 'APPROVER';
-  const pendingRequests = data?.procurementRequests?.filter((req: any) => req.status === 'SUBMITTED' || req.status === 'UNDER_REVIEW') || [];
+  const filteredRequests = data?.procurementRequests?.filter((r: any) => statusFilter === 'ALL' || r.status === statusFilter) || []
+  const approvalQueue = data?.procurementRequests?.filter((r: any) => r.status === 'SUBMITTED' || r.status === 'UNDER_REVIEW') || []
 
   return (
-    <div>
-      <h2>Procurement Requests</h2>
-      
-      {!currentUser && (
-        <div style={{ padding: '1rem', background: '#ffebee', color: '#c62828', borderRadius: '8px', marginBottom: '1rem' }}>
-          Please select a user from the header dropdown to create or approve requests.
+    <div className="page">
+      <PageHeader title="Procurement Requests" subtitle="Submit and track requests for goods and services" />
+
+      {currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'APPROVER') && approvalQueue.length > 0 && (
+        <section className="section" style={{ background: 'var(--color-surface-soft)', padding: '1.5rem', borderRadius: 'var(--radius-card)', border: '1px solid var(--color-warning)' }}>
+          <h2 className="section-header" style={{ color: 'var(--color-warning)' }}>Action Required: Pending Approvals</h2>
+          <div className="card-grid">
+            {approvalQueue.map((req: any) => (
+              <Card key={req.id} style={{ borderLeft: '4px solid var(--color-warning)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{req.title}</h3>
+                  <StatusBadge status={req.status} />
+                </div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--color-muted)', marginBottom: '1rem' }}>
+                  Requested by: {req.requestedBy?.name || 'Unknown'} ({req.department})
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {req.status === 'SUBMITTED' && (
+                    <Button variant="secondary" onClick={() => handleReview(req.id, 'UNDER_REVIEW')} disabled={reviewLoading}>
+                      Mark Under Review
+                    </Button>
+                  )}
+                  {req.status === 'UNDER_REVIEW' && (
+                    <>
+                      <Button variant="primary" onClick={() => handleReview(req.id, 'APPROVED')} disabled={reviewLoading}>
+                        Approve Request
+                      </Button>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <input 
+                          type="text" 
+                          placeholder="Reason for rejection" 
+                          value={rejectionReason[req.id] || ''} 
+                          onChange={(e) => setRejectionReason({ ...rejectionReason, [req.id]: e.target.value })}
+                          style={{ flex: 1, padding: '0.4rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-button)' }}
+                        />
+                        <Button variant="danger" onClick={() => handleReview(req.id, 'REJECTED')} disabled={reviewLoading}>
+                          Reject
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {currentUser && (
+        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 400px' }}>
+            <Card className="form-card" style={{ margin: 0 }}>
+              <h3 className="section-header">Submit New Request</h3>
+              {createError && <div className="error-message">Error: {createError.message}</div>}
+              
+              <form onSubmit={handleSubmit} className="form-grid" style={{ gridTemplateColumns: '1fr' }}>
+                <FormField label="Title *">
+                  <input name="title" value={formData.title} onChange={handleChange} required />
+                </FormField>
+                
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <FormField label="Department *" className="form-grid-full" style={{ flex: 1 }}>
+                    <input name="department" value={formData.department} onChange={handleChange} required />
+                  </FormField>
+                  <FormField label="Priority *" className="form-grid-full" style={{ flex: 1 }}>
+                    <select name="priority" value={formData.priority} onChange={handleChange} required>
+                      <option value="LOW">Low</option>
+                      <option value="MEDIUM">Medium</option>
+                      <option value="HIGH">High</option>
+                      <option value="URGENT">Urgent</option>
+                    </select>
+                  </FormField>
+                </div>
+                
+                <FormField label="Needed By Date">
+                  <input type="date" name="neededByDate" value={formData.neededByDate} onChange={handleChange} />
+                </FormField>
+                
+                <FormField label="Description">
+                  <textarea name="description" value={formData.description} onChange={handleChange} />
+                </FormField>
+
+                <Button type="submit" disabled={createLoading}>
+                  {createLoading ? 'Submitting...' : 'Submit Request'}
+                </Button>
+              </form>
+            </Card>
+          </div>
+
+          <div style={{ flex: '1 1 400px' }}>
+            <Card className="form-card" style={{ margin: 0 }}>
+              <h3 className="section-header">Add Line Item</h3>
+              {createItemError && <div className="error-message">Error: {createItemError.message}</div>}
+              
+              <form onSubmit={handleItemSubmit} className="form-grid">
+                <FormField label="Select Request *" className="form-grid-full">
+                  <select name="procurementRequestId" value={itemFormData.procurementRequestId} onChange={handleItemChange} required>
+                    <option value="" disabled>Select a request</option>
+                    {data?.procurementRequests?.filter((r: any) => r.status === 'DRAFT' || r.status === 'SUBMITTED').map((req: any) => (
+                      <option key={req.id} value={req.id}>{req.title} ({req.department})</option>
+                    ))}
+                  </select>
+                </FormField>
+                
+                <FormField label="Item Name *">
+                  <input name="itemName" value={itemFormData.itemName} onChange={handleItemChange} required />
+                </FormField>
+                
+                <FormField label="Quantity *">
+                  <input type="number" min="1" name="quantity" value={itemFormData.quantity} onChange={handleItemChange} required />
+                </FormField>
+                
+                <FormField label="Unit of Measure *">
+                  <input name="unitOfMeasure" placeholder="e.g. Each, Box, kg" value={itemFormData.unitOfMeasure} onChange={handleItemChange} required />
+                </FormField>
+                
+                <FormField label="Estimated Unit Cost">
+                  <input type="number" step="0.01" min="0" name="estimatedUnitCost" value={itemFormData.estimatedUnitCost} onChange={handleItemChange} />
+                </FormField>
+
+                <FormField label="Part Number">
+                  <input name="partNumber" value={itemFormData.partNumber} onChange={handleItemChange} />
+                </FormField>
+                
+                <FormField label="Manufacturer">
+                  <input name="manufacturer" value={itemFormData.manufacturer} onChange={handleItemChange} />
+                </FormField>
+
+                <FormField label="Description" className="form-grid-full">
+                  <textarea name="description" value={itemFormData.description} onChange={handleItemChange} />
+                </FormField>
+
+                <div className="form-grid-full">
+                  <Button type="submit" disabled={createItemLoading || !itemFormData.procurementRequestId}>
+                    {createItemLoading ? 'Adding...' : 'Add Item'}
+                  </Button>
+                </div>
+              </form>
+            </Card>
+          </div>
         </div>
       )}
 
-      {/* Approvals Section */}
-      <div style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--card-bg)', borderRadius: '8px', borderLeft: '4px solid #f39c12', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-        <h3>Approvals</h3>
-        {canApprove ? (
-          pendingRequests.length > 0 ? (
-            <div style={{ display: 'grid', gap: '1rem' }}>
-              {pendingRequests.map((req: any) => (
-                <div key={req.id} style={{ padding: '1rem', background: 'var(--social-bg)', borderRadius: '6px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <h4 style={{ margin: '0 0 0.5rem 0' }}>{req.title} <span style={{ fontSize: '0.8rem', color: '#f39c12' }}>[{req.status}]</span></h4>
-                    <span style={{ fontSize: '0.85rem' }}>By: {req.requestedBy?.name || 'Unknown'}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap' }}>
-                    {req.status === 'SUBMITTED' && (
-                      <button onClick={() => handleReview(req.id, 'UNDER_REVIEW')} disabled={reviewLoading} style={{ padding: '0.5rem 1rem', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Mark Under Review</button>
-                    )}
-                    <button onClick={() => handleReview(req.id, 'APPROVE')} disabled={reviewLoading} style={{ padding: '0.5rem 1rem', background: '#2ecc71', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Approve</button>
-                    
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <input 
-                        type="text" 
-                        placeholder="Rejection reason..." 
-                        value={rejectionReason[req.id] || ''} 
-                        onChange={(e) => setRejectionReason({ ...rejectionReason, [req.id]: e.target.value })}
-                        style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
-                      />
-                      <button onClick={() => handleReview(req.id, 'REJECT')} disabled={reviewLoading} style={{ padding: '0.5rem 1rem', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Reject</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p>No requests pending approval.</p>
-          )
-        ) : (
-          <p style={{ color: 'var(--text-secondary)' }}>You do not have permission to approve requests. Must be ADMIN or APPROVER.</p>
-        )}
-      </div>
-
-      <div className="form-container" style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--social-bg)', borderRadius: '8px' }}>
-        <h3>Create New Request</h3>
-        {createError && <p style={{ color: 'red' }}>Error: {createError.message}</p>}
-        
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Title *</label>
-            <input name="title" value={formData.title} onChange={handleChange} required style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Description</label>
-            <textarea name="description" value={formData.description} onChange={handleChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-          </div>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Department *</label>
-              <input name="department" value={formData.department} onChange={handleChange} required style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Priority</label>
-              <select name="priority" value={formData.priority} onChange={handleChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }}>
-                <option value="LOW">Low</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HIGH">High</option>
-                <option value="URGENT">Urgent</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Needed By Date</label>
-            <input type="date" name="neededByDate" value={formData.neededByDate} onChange={handleChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-          </div>
-          <button type="submit" disabled={createLoading || !currentUser} style={{ padding: '0.75rem', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem', opacity: !currentUser ? 0.5 : 1 }}>
-            {createLoading ? 'Submitting...' : 'Submit Request'}
-          </button>
-        </form>
-      </div>
-
-      <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3>All Requests</h3>
-        <div>
-          <label style={{ marginRight: '0.5rem' }}>Filter by Status:</label>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}>
-            <option value="ALL">All</option>
-            <option value="DRAFT">DRAFT</option>
-            <option value="SUBMITTED">SUBMITTED</option>
-            <option value="UNDER_REVIEW">UNDER_REVIEW</option>
-            <option value="APPROVED">APPROVED</option>
-            <option value="ORDERED">ORDERED</option>
-            <option value="RECEIVED">RECEIVED</option>
-            <option value="CLOSED">CLOSED</option>
-            <option value="REJECTED">REJECTED</option>
+      <section className="section" style={{ marginTop: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
+          <h2 className="section-header" style={{ borderBottom: 'none', padding: 0, margin: 0 }}>All Requests</h2>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ padding: '0.4rem', borderRadius: 'var(--radius-button)', border: '1px solid var(--color-border)' }}>
+            <option value="ALL">All Statuses</option>
+            <option value="DRAFT">Draft</option>
+            <option value="SUBMITTED">Submitted</option>
+            <option value="UNDER_REVIEW">Under Review</option>
+            <option value="APPROVED">Approved</option>
+            <option value="REJECTED">Rejected</option>
+            <option value="ORDERED">Ordered</option>
+            <option value="RECEIVED">Received</option>
+            <option value="CLOSED">Closed</option>
           </select>
         </div>
-      </div>
 
-      {loading && <p>Loading requests...</p>}
-      {error && <p style={{ color: 'red' }}>Failed to load requests: {error.message}</p>}
-      {filteredRequests.length === 0 && !loading && <p>No requests found.</p>}
-      
-      <div style={{ display: 'grid', gap: '1rem' }}>
-        {filteredRequests.map((req: any) => (
-          <div key={req.id} className="request-card" style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '8px', textAlign: 'left' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-              <h3 style={{ margin: 0 }}>{req.title}</h3>
-              <span style={{ padding: '0.25rem 0.5rem', background: req.status === 'APPROVED' ? '#d4edda' : req.status === 'REJECTED' ? '#f8d7da' : 'var(--code-bg)', color: req.status === 'APPROVED' ? '#155724' : req.status === 'REJECTED' ? '#721c24' : 'inherit', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold' }}>{req.status}</span>
-            </div>
-            
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', fontSize: '0.9rem', marginBottom: '1rem', background: 'var(--social-bg)', padding: '0.5rem', borderRadius: '4px' }}>
-              <span><strong>Requested By:</strong> {req.requestedBy?.name || 'N/A'}</span>
-              <span><strong>Approved By:</strong> {req.approvedBy?.name || 'N/A'}</span>
-              {req.approvedAt && <span><strong>Approved At:</strong> {new Date(req.approvedAt).toLocaleDateString()}</span>}
-              {req.rejectionReason && <span style={{ color: '#e74c3c' }}><strong>Reason:</strong> {req.rejectionReason}</span>}
-            </div>
+        {loading ? (
+          <LoadingState />
+        ) : filteredRequests.length === 0 ? (
+          <EmptyState message="No requests found." />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {filteredRequests.map((req: any) => (
+              <Card key={req.id}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--color-accent-dark)' }}>{req.title}</h3>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--color-muted)' }}>{req.department} • Priority: {req.priority}</div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+                    <StatusBadge status={req.status} />
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+                      Requested by: {req.requestedBy?.name || 'Unknown'}
+                    </span>
+                  </div>
+                </div>
 
-            <p style={{ margin: '0 0 0.5rem 0', color: 'var(--text)' }}>Department: {req.department}</p>
-            <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem', color: 'var(--text)', marginBottom: '1rem' }}>
-              <span>Priority: {req.priority}</span>
-              <span>Needed: {req.neededByDate ? new Date(req.neededByDate).toLocaleDateString() : 'Not specified'}</span>
-              <span>Created: {new Date(req.createdAt).toLocaleDateString()}</span>
-            </div>
-            
-            <div style={{ padding: '1rem', background: 'var(--social-bg)', borderRadius: '6px' }}>
-              <h4 style={{ margin: '0 0 0.5rem 0' }}>Line Items</h4>
-              {req.items && req.items.length > 0 ? (
-                <ul style={{ margin: 0, paddingLeft: '1.5rem', fontSize: '0.9rem' }}>
-                  {req.items.map((item: any) => (
-                    <li key={item.id} style={{ marginBottom: '0.25rem' }}>
-                      <strong>{item.quantity}x {item.itemName}</strong> 
-                      {item.partNumber && ` (PN: ${item.partNumber})`}
-                      {item.estimatedUnitCost && ` - $${item.estimatedUnitCost}/ea`}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text)' }}>No items added yet.</p>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+                <div style={{ fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+                  {req.description && <p style={{ margin: '0 0 0.5rem 0' }}>{req.description}</p>}
+                  {req.neededByDate && <p style={{ margin: 0, color: 'var(--color-danger)' }}>Needed by: {new Date(req.neededByDate).toLocaleDateString()}</p>}
+                  {req.rejectionReason && <p style={{ margin: '0.5rem 0 0 0', color: 'var(--color-danger)', fontWeight: 600 }}>Rejection Reason: {req.rejectionReason}</p>}
+                </div>
 
-      <hr style={{ margin: '3rem 0', border: 'none', borderTop: '1px solid var(--border)' }} />
-
-      <div className="form-container" style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--social-bg)', borderRadius: '8px' }}>
-        <h3>Add Line Item to Request</h3>
-        {createItemError && <p style={{ color: 'red' }}>Error: {createItemError.message}</p>}
-        
-        <form onSubmit={handleItemSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Procurement Request *</label>
-            <select name="procurementRequestId" value={itemFormData.procurementRequestId} onChange={handleItemChange} required style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }}>
-              <option value="" disabled>Select a request</option>
-              {data?.procurementRequests?.map((req: any) => (
-                <option key={req.id} value={req.id}>{req.title}</option>
-              ))}
-            </select>
+                <div style={{ background: 'var(--color-surface-soft)', padding: '1rem', borderRadius: 'var(--radius-card)', border: '1px solid var(--color-border)' }}>
+                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem' }}>Line Items ({req.items?.length || 0})</h4>
+                  {req.items?.length === 0 ? (
+                    <div style={{ fontSize: '0.85rem', color: 'var(--color-muted)' }}>No line items added yet.</div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1rem' }}>
+                      {req.items.map((item: any) => (
+                        <div key={item.id} style={{ fontSize: '0.85rem', background: 'var(--color-surface)', padding: '0.75rem', borderRadius: '4px', border: '1px solid var(--color-border)' }}>
+                          <strong style={{ display: 'block', color: 'var(--color-accent-dark)' }}>{item.itemName}</strong>
+                          <div>Qty: {item.quantity} {item.unitOfMeasure}</div>
+                          {item.estimatedUnitCost && <div>Est. Cost: ${item.estimatedUnitCost.toFixed(2)}</div>}
+                          {item.manufacturer && <div>Mfg: {item.manufacturer}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            ))}
           </div>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ flex: 2 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Item Name *</label>
-              <input name="itemName" value={itemFormData.itemName} onChange={handleItemChange} required style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Quantity *</label>
-              <input type="number" name="quantity" min="1" value={itemFormData.quantity} onChange={handleItemChange} required style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Unit of Measure</label>
-              <input name="unitOfMeasure" value={itemFormData.unitOfMeasure} onChange={handleItemChange} placeholder="e.g., EA, PKG, BOX" style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Est. Unit Cost ($)</label>
-              <input type="number" step="0.01" name="estimatedUnitCost" value={itemFormData.estimatedUnitCost} onChange={handleItemChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Part Number</label>
-              <input name="partNumber" value={itemFormData.partNumber} onChange={handleItemChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Manufacturer</label>
-              <input name="manufacturer" value={itemFormData.manufacturer} onChange={handleItemChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-            </div>
-          </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Description / Notes</label>
-            <textarea name="description" value={itemFormData.description} onChange={handleItemChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-          </div>
-          <button type="submit" disabled={createItemLoading} style={{ padding: '0.75rem', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginTop: '1rem' }}>
-            {createItemLoading ? 'Adding...' : 'Add Item'}
-          </button>
-        </form>
-      </div>
+        )}
+      </section>
     </div>
   )
 }

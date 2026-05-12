@@ -19,7 +19,42 @@ async function main() {
     { name: 'Taylor Chen', email: 'taylor.chen@example.com', role: UserRole.BUYER, department: 'Purchasing' },
     { name: 'Riley Brooks', email: 'riley.brooks@example.com', role: UserRole.RECEIVER, department: 'Warehouse' },
     { name: 'Casey Morgan', email: 'casey.morgan@example.com', role: UserRole.REQUESTER, department: 'Maintenance' },
+    { name: 'Hector Pacheco', email: 'hector@example.com', role: UserRole.ADMIN, department: 'Engineering' },
   ];
+
+  const oldEmailsToDelete = [
+    'sarah@example.com',
+    'sasha@example.com',
+    'alex@example.com',
+    'miguel@example.com',
+    'dana@example.com',
+    'sarah.mitchell@example.com',
+    'sasha.mitchell@example.com',
+    'alex.johnson@example.com',
+    'miguel.torres@example.com',
+    'dana.lee@example.com',
+  ];
+
+  console.log('Cleaning up old demo users...');
+  for (const email of oldEmailsToDelete) {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user) {
+      try {
+        await prisma.user.delete({ where: { email } });
+        console.log(`Deleted old demo user: ${email}`);
+      } catch (e) {
+        // Fallback: archive the user if they are referenced by procurement requests
+        await prisma.user.update({
+          where: { email },
+          data: {
+            isActive: false,
+            name: `Archived Demo User (${user.name})`
+          }
+        });
+        console.log(`Archived old demo user (could not delete due to relations): ${email}`);
+      }
+    }
+  }
 
   const passwordHash = await bcrypt.hash('DemoPass123!', 10);
 

@@ -1,3 +1,11 @@
+const fs = require('fs');
+const path = require('path');
+
+const write = (file, content) => {
+  fs.writeFileSync(path.join('src/pages', file), content.trim());
+};
+
+write('ReceivingPage.tsx', `
 import React, { useState } from 'react'
 import { useQuery, useMutation } from '@apollo/client/react'
 import { GET_PURCHASE_ORDERS, GET_PROCUREMENT_REQUESTS, RECEIVE_PO_ITEM } from '../graphql/queries'
@@ -121,3 +129,6 @@ export const ReceivingPage = () => {
     </div>
   )
 }
+`);
+
+console.log("ReceivingPage updated.");

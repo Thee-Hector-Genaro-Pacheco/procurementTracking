@@ -1,3 +1,11 @@
+const fs = require('fs');
+const path = require('path');
+
+const write = (file, content) => {
+  fs.writeFileSync(path.join('src/pages', file), content.trim());
+};
+
+write('LoginPage.tsx', `
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -80,3 +88,6 @@ export default function LoginPage() {
     </div>
   );
 }
+`);
+
+console.log("LoginPage updated.");

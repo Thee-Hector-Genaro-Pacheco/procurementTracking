@@ -1,88 +1,107 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation } from '@apollo/client/react';
-import { GET_USERS, CREATE_USER } from '../graphql/queries';
+import React, { useState } from 'react'
+import { useQuery, useMutation } from '@apollo/client/react'
+import { GET_USERS, CREATE_USER } from '../graphql/queries'
+import { Card } from '../components/ui/Card'
+import { PageHeader } from '../components/ui/PageHeader'
+import { FormField } from '../components/ui/FormField'
+import { Button } from '../components/ui/Button'
+import { StatusBadge } from '../components/shared/StatusBadge'
+import { LoadingState } from '../components/shared/LoadingState'
+import { EmptyState } from '../components/ui/EmptyState'
+import { useUser } from '../contexts/UserContext'
 
-export const UsersPage: React.FC = () => {
-  const { data: usersData, loading: usersLoading, error: usersError } = useQuery<any>(GET_USERS);
-  const [createUser, { loading: createLoading, error: createError }] = useMutation<any>(CREATE_USER, {
-    refetchQueries: [{ query: GET_USERS }],
-  });
+export const UsersPage = () => {
+  const { currentUser } = useUser()
+  const { data: usersData, loading: usersLoading } = useQuery<any>(GET_USERS)
+  const [createUser, { loading: createUserLoading, error: createUserError }] = useMutation<any>(CREATE_USER, {
+    refetchQueries: [{ query: GET_USERS }]
+  })
 
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    role: 'REQUESTER',
-    department: '',
-  });
+  const [formData, setFormData] = useState({ name: '', email: '', role: 'REQUESTER', department: '' })
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+    setFormData({ ...formData, [e.target.name]: e.target.value })
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
     try {
-      await createUser({ variables: { input: formData } });
-      setFormData({ name: '', email: '', role: 'REQUESTER', department: '' });
-    } catch (err) {
-      console.error('Error creating user:', err);
-    }
-  };
-
-  if (usersLoading) return <p>Loading users...</p>;
+      await createUser({ variables: { input: formData } })
+      setFormData({ name: '', email: '', role: 'REQUESTER', department: '' })
+    } catch (err) {}
+  }
 
   return (
-    <div>
-      <h2>Users & Roles</h2>
+    <div className="page">
+      <PageHeader title="User Management" subtitle="Manage application access and roles" />
 
-      <div className="form-container" style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--social-bg)', borderRadius: '8px' }}>
-        <h3>Add New User</h3>
-        {createError && <p style={{ color: 'red' }}>Error: {createError.message}</p>}
-        {usersError && <p style={{ color: 'red' }}>Error loading users: {usersError.message}</p>}
-        
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Name *</label>
-              <input type="text" name="name" value={formData.name} onChange={handleChange} required style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Email *</label>
-              <input type="email" name="email" value={formData.email} onChange={handleChange} required style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Role *</label>
-              <select name="role" value={formData.role} onChange={handleChange} required style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }}>
-                <option value="ADMIN">Admin</option>
-                <option value="APPROVER">Approver</option>
-                <option value="BUYER">Buyer</option>
-                <option value="RECEIVER">Receiver</option>
-                <option value="REQUESTER">Requester</option>
+      {currentUser?.role === 'ADMIN' ? (
+        <Card className="form-card">
+          <h3 className="section-header">Provision New User</h3>
+          {createUserError && <div className="error-message">{createUserError.message}</div>}
+
+          <form onSubmit={handleSubmit} className="form-grid">
+            <FormField label="Name *">
+              <input name="name" value={formData.name} onChange={handleChange} required />
+            </FormField>
+            
+            <FormField label="Email *">
+              <input type="email" name="email" value={formData.email} onChange={handleChange} required />
+            </FormField>
+            
+            <FormField label="Role *">
+              <select name="role" value={formData.role} onChange={handleChange} required>
+                <option value="ADMIN">ADMIN</option>
+                <option value="APPROVER">APPROVER</option>
+                <option value="BUYER">BUYER</option>
+                <option value="RECEIVER">RECEIVER</option>
+                <option value="REQUESTER">REQUESTER</option>
               </select>
+            </FormField>
+            
+            <FormField label="Department">
+              <input name="department" value={formData.department} onChange={handleChange} />
+            </FormField>
+            
+            <div className="form-grid-full">
+              <Button type="submit" disabled={createUserLoading}>
+                {createUserLoading ? 'Creating...' : 'Create User'}
+              </Button>
             </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem' }}>Department</label>
-              <input type="text" name="department" value={formData.department} onChange={handleChange} style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} />
-            </div>
-          </div>
-          <button type="submit" disabled={createLoading} style={{ alignSelf: 'flex-start', padding: '0.5rem 1.5rem', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-            {createLoading ? 'Creating...' : 'Create User'}
-          </button>
-        </form>
-      </div>
+          </form>
+        </Card>
+      ) : (
+        <Card>
+          <p style={{ margin: 0, color: 'var(--color-muted)', textAlign: 'center' }}>
+            Only administrators can provision new users. Please contact an admin if you need access for a new team member.
+          </p>
+        </Card>
+      )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-        {usersData?.users?.map((user: any) => (
-          <div key={user.id} style={{ background: 'var(--card-bg)', padding: '1rem', borderRadius: '8px', borderLeft: '4px solid var(--accent)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-            <h4 style={{ margin: '0 0 0.5rem 0' }}>{user.name}</h4>
-            <p style={{ margin: '0 0 0.25rem 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{user.email}</p>
-            <p style={{ margin: '0 0 0.25rem 0', fontSize: '0.9rem' }}><strong>Role:</strong> {user.role}</p>
-            <p style={{ margin: '0', fontSize: '0.9rem' }}><strong>Department:</strong> {user.department || 'N/A'}</p>
+      <section className="section">
+        <h2 className="section-header">Active Users</h2>
+        
+        {usersLoading ? (
+          <LoadingState />
+        ) : usersData?.users?.length === 0 ? (
+          <EmptyState message="No users found." />
+        ) : (
+          <div className="card-grid">
+            {usersData?.users.map((u: any) => (
+              <Card key={u.id}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--color-accent-dark)' }}>{u.name}</h3>
+                  <StatusBadge status={u.role} />
+                </div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--color-muted)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <span><strong>Email:</strong> {u.email}</span>
+                  <span><strong>Department:</strong> {u.department || 'N/A'}</span>
+                </div>
+              </Card>
+            ))}
           </div>
-        ))}
-      </div>
+        )}
+      </section>
     </div>
-  );
-};
+  )
+}

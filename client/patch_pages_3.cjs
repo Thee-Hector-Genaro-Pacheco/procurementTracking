@@ -1,3 +1,11 @@
+const fs = require('fs');
+const path = require('path');
+
+const write = (file, content) => {
+  fs.writeFileSync(path.join('src/pages', file), content.trim());
+};
+
+write('VendorsPage.tsx', `
 import React, { useState } from 'react'
 import { useQuery, useMutation } from '@apollo/client/react'
 import { GET_VENDORS, CREATE_VENDOR } from '../graphql/queries'
@@ -176,3 +184,6 @@ export const VendorsPage = () => {
     </div>
   )
 }
+`);
+
+console.log("VendorsPage updated.");

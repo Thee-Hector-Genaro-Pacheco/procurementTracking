@@ -1,3 +1,11 @@
+const fs = require('fs');
+const path = require('path');
+
+const write = (file, content) => {
+  fs.writeFileSync(path.join('src/pages', file), content.trim());
+};
+
+write('DashboardPage.tsx', `
 import { useQuery } from '@apollo/client/react'
 import { GET_PROCUREMENT_REQUESTS, GET_PURCHASE_ORDERS, GET_VENDORS } from '../graphql/queries'
 import { Card } from '../components/ui/Card'
@@ -72,3 +80,6 @@ export const DashboardPage = () => {
     </div>
   )
 }
+`);
+
+console.log("DashboardPage updated.");
