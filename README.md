@@ -1,63 +1,86 @@
-# Procurement Tracking
+# Procurement Tracking App
 
-A full-stack application built with React, Vite, Node.js, Express, Apollo GraphQL, and Prisma.
+An operational dashboard for managing procurement requests, vendors, purchase orders, and receiving, built with a modern React + Node + GraphQL + Prisma stack.
 
-## Setup
+## Architecture
+- **Frontend**: React, TypeScript, Apollo Client, Vite, plain CSS (Foundry/Workshop-inspired design)
+- **Backend**: Node.js, Express, Apollo Server, GraphQL, Prisma ORM
+- **Database**: PostgreSQL
+- **Auth**: JWT-based via HTTP-only cookies, BCrypt for password hashing
+
+## Prerequisites
+- Node.js (v18+)
+- PostgreSQL database
+
+## Environment Setup
+
+### Server
+Create `server/.env` with the following variables:
+```env
+DATABASE_URL="postgresql://user:password@localhost:5432/procurement_db"
+PORT=4000
+CLIENT_URL="http://localhost:5173"
+JWT_SECRET="replace_this_with_a_secure_secret_in_production"
+JWT_EXPIRES_IN="7d"
+NODE_ENV="development" # Set to 'production' for deployments
+```
+
+### Client
+Create `client/.env` with the following variable:
+```env
+VITE_GRAPHQL_URL="http://localhost:4000/graphql"
+```
+
+## Local Development
 
 1. **Install dependencies:**
-   From the root, navigate to both the `client` and `server` directories and run `npm install`:
+   Navigate into both directories to install dependencies.
    ```bash
-   cd client
-   npm install
-   
-   cd ../server
-   npm install
+   cd server && npm install
+   cd ../client && npm install
+   cd ..
    ```
 
-2. **Environment Variables:**
-   In the `server` directory, copy `.env.example` to `.env`:
-   ```bash
-   cd server
-   cp .env.example .env
-   ```
-   **Important:** You must configure the `DATABASE_URL` in `.env` to point to your running PostgreSQL database.
-
-3. **Database Setup:**
-   Run the Prisma migrations to initialize the database schema in PostgreSQL:
+2. **Initialize Database:**
    ```bash
    cd server
    npm run prisma:migrate
-   ```
-   To seed the database with demo vendors (including I&C and Nuclear specific vendors):
-   ```bash
    npm run prisma:seed
    ```
-   To view and manage your data, you can open Prisma Studio:
+
+3. **Run Development Servers:**
+   From the root of the repository, you can start both servers:
    ```bash
-   npm run prisma:studio
+   npm run dev
    ```
+   Or run them individually from their respective directories (`npm run dev`).
 
-## Running the Application
+## Demo Accounts
+The `npm run prisma:seed` command populates the database with demo users. All accounts use the password `DemoPass123!`.
+- **Admin**: jordan.reyes@example.com
+- **Approver**: morgan.blake@example.com
+- **Buyer**: taylor.chen@example.com
+- **Receiver**: riley.brooks@example.com
+- **Requester**: casey.morgan@example.com
+- **Admin**: hector@example.com
 
-**Run the Server:**
-```bash
-cd server
-npm run dev
-```
-The server will start on `http://localhost:4000/graphql`.
+## Deployment Notes
 
-**Run the Client:**
-```bash
-cd client
-npm run dev
-```
-The client will start on `http://localhost:5173`.
+### Frontend Deployment
+The client is a standard Vite React application. It can be hosted on static platforms like **Vercel**, **Netlify**, or **Cloudflare Pages**.
+- Build Command: `npm run build`
+- Output Directory: `dist`
+- Environment Variables: `VITE_GRAPHQL_URL` (Set to your production backend URL)
 
-## Testing
+### Backend Deployment
+The server is an Express Node.js application. It requires a Node.js runtime and can be hosted on platforms like **Render**, **Railway**, or **Heroku**.
+- Build Command: `npm run build`
+- Start Command: `npm run start` (which runs `node dist/src/index.js`)
+- Environment Variables: All variables listed in the server `.env.example`, including setting `NODE_ENV=production`.
+  *(Setting NODE_ENV to production automatically enforces strict secure cookie policies `sameSite="none"` and `secure=true` for cross-origin authentication).*
 
-You can visit `http://localhost:4000/graphql` to run the following test query:
-```graphql
-query {
-  healthCheck
-}
-```
+### Database
+A managed PostgreSQL instance is required. **Neon**, **Supabase**, or **Render PostgreSQL** are excellent choices.
+
+### Note on Palantir Foundry
+This application uses a Node/Express backend and PostgreSQL database. While its frontend aesthetic mimics Palantir Foundry/Workshop, deploying it *inside* a Palantir Foundry instance typically requires utilizing Foundry's native Object System (OSDK) and Workshop tools, rather than a standalone PostgreSQL/Node stack. For standard cloud deployments, follow the Vercel/Render architecture described above.

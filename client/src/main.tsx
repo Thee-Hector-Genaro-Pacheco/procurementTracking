@@ -8,7 +8,7 @@ import "./index.css";
 
 const client = new ApolloClient({
   link: new HttpLink({
-    uri: "http://localhost:4000/graphql",
+    uri: import.meta.env.VITE_GRAPHQL_URL || "http://localhost:4000/graphql",
     credentials: "include",
   }),
   cache: new InMemoryCache(),
