@@ -124,6 +124,36 @@ export const UPDATE_PO_STATUS = gql`
   }
 `
 
+export const APPROVE_PURCHASE_ORDER = gql`
+  mutation ApprovePurchaseOrder($id: ID!, $approverId: ID!) {
+    approvePurchaseOrder(id: $id, approverId: $approverId) {
+      id
+      status
+      approvedBy {
+        id
+        name
+      }
+      approvedAt
+      denialReason
+    }
+  }
+`
+
+export const DENY_PURCHASE_ORDER = gql`
+  mutation DenyPurchaseOrder($id: ID!, $approverId: ID!, $reason: String!) {
+    denyPurchaseOrder(id: $id, approverId: $approverId, reason: $reason) {
+      id
+      status
+      approvedBy {
+        id
+        name
+      }
+      approvedAt
+      denialReason
+    }
+  }
+`
+
 export const GET_VENDORS = gql`
   query GetVendors {
     vendors {

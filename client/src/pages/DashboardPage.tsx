@@ -57,6 +57,9 @@ export const DashboardPage = () => {
         <h2 className="section-header">Purchase Orders</h2>
         <div className="dashboard-grid">
           <Metric title="Total POs" value={totalPOs} />
+          <Metric title="Pending Approval" value={pos.filter((po: any) => po.status === 'PENDING_APPROVAL').length} />
+          <Metric title="Approved" value={pos.filter((po: any) => po.status === 'APPROVED').length} />
+          <Metric title="Denied" value={pos.filter((po: any) => po.status === 'DENIED').length} />
           <Metric title="Partially Received" value={partiallyReceivedPOs} />
           <Metric title="Fully Received" value={fullyReceivedPOs} />
         </div>

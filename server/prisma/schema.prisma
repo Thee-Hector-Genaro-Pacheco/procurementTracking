@@ -52,6 +52,9 @@ enum VendorQualificationStatus {
 
 enum PurchaseOrderStatus {
   DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  DENIED
   ISSUED
   ACKNOWLEDGED
   PARTIALLY_RECEIVED
@@ -93,6 +96,7 @@ model User {
 
   requestsRequested ProcurementRequest[] @relation("RequestRequestedBy")
   requestsApproved  ProcurementRequest[] @relation("RequestApprovedBy")
+  purchaseOrdersApproved PurchaseOrder[] @relation("PurchaseOrderApprovedBy")
 }
 
 model RequestItem {
@@ -137,7 +141,11 @@ model PurchaseOrder {
   procurementRequest   ProcurementRequest  @relation(fields: [procurementRequestId], references: [id], onDelete: Cascade)
   vendorId             String
   vendor               Vendor              @relation(fields: [vendorId], references: [id])
-  status               PurchaseOrderStatus @default(DRAFT)
+  status               PurchaseOrderStatus @default(PENDING_APPROVAL)
+  approvedById         String?
+  approvedBy           User?               @relation("PurchaseOrderApprovedBy", fields: [approvedById], references: [id])
+  approvedAt           DateTime?
+  denialReason         String?
   orderDate            DateTime?
   expectedDeliveryDate DateTime?
   subtotal             Float               @default(0)

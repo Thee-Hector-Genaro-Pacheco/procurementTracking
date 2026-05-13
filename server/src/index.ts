@@ -65,6 +65,9 @@ const typeDefs = `#graphql
 
   enum PurchaseOrderStatus {
     DRAFT
+    PENDING_APPROVAL
+    APPROVED
+    DENIED
     ISSUED
     ACKNOWLEDGED
     PARTIALLY_RECEIVED
@@ -227,6 +230,10 @@ const typeDefs = `#graphql
     vendorId: ID!
     vendor: Vendor!
     status: PurchaseOrderStatus!
+    approvedById: ID
+    approvedBy: User
+    approvedAt: String
+    denialReason: String
     orderDate: String
     expectedDeliveryDate: String
     subtotal: Float!
@@ -295,6 +302,8 @@ const typeDefs = `#graphql
     createVendor(input: CreateVendorInput!): Vendor!
     createRequestItem(input: CreateRequestItemInput!): RequestItem!
     createPurchaseOrder(input: CreatePurchaseOrderInput!): PurchaseOrder!
+    approvePurchaseOrder(id: ID!, approverId: ID!): PurchaseOrder!
+    denyPurchaseOrder(id: ID!, approverId: ID!, reason: String!): PurchaseOrder!
     updatePurchaseOrderStatus(input: UpdatePurchaseOrderStatusInput!): PurchaseOrder!
     receivePurchaseOrderItem(input: ReceivePurchaseOrderItemInput!): PurchaseOrder!
   }
@@ -311,11 +320,11 @@ const resolvers = {
     },
     users: async () => {
       const users = await prisma.user.findMany({ orderBy: { name: 'asc' } });
-      return users.map(u => ({ ...u, createdAt: u.createdAt.toISOString(), updatedAt: u.updatedAt.toISOString() }));
+      return users.map((u: any) => ({ ...u, createdAt: u.createdAt.toISOString(), updatedAt: u.updatedAt.toISOString() }));
     },
     activeUsers: async () => {
       const users = await prisma.user.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } });
-      return users.map(u => ({ ...u, createdAt: u.createdAt.toISOString(), updatedAt: u.updatedAt.toISOString() }));
+      return users.map((u: any) => ({ ...u, createdAt: u.createdAt.toISOString(), updatedAt: u.updatedAt.toISOString() }));
     },
     user: async (_: any, { id }: { id: string }) => {
       const u = await prisma.user.findUnique({ where: { id } });
@@ -328,7 +337,7 @@ const resolvers = {
         include: { items: true, requestedBy: true, approvedBy: true },
         orderBy: { createdAt: 'desc' }
       });
-      return requests.map(req => ({
+      return requests.map((req: any) => ({
         ...req,
         createdAt: req.createdAt.toISOString(),
         updatedAt: req.updatedAt.toISOString(),
@@ -336,7 +345,7 @@ const resolvers = {
         approvedAt: req.approvedAt ? req.approvedAt.toISOString() : null,
         requestedBy: req.requestedBy ? { ...req.requestedBy, createdAt: req.requestedBy.createdAt.toISOString(), updatedAt: req.requestedBy.updatedAt.toISOString() } : null,
         approvedBy: req.approvedBy ? { ...req.approvedBy, createdAt: req.approvedBy.createdAt.toISOString(), updatedAt: req.approvedBy.updatedAt.toISOString() } : null,
-        items: req.items.map(item => ({
+        items: req.items.map((item: any) => ({
           ...item,
           createdAt: item.createdAt.toISOString(),
           updatedAt: item.updatedAt.toISOString(),
@@ -348,7 +357,7 @@ const resolvers = {
         include: { items: true, requestedBy: true, approvedBy: true },
         orderBy: { createdAt: 'desc' }
       });
-      return requests.map(req => ({
+      return requests.map((req: any) => ({
         ...req,
         createdAt: req.createdAt.toISOString(),
         updatedAt: req.updatedAt.toISOString(),
@@ -356,7 +365,7 @@ const resolvers = {
         approvedAt: req.approvedAt ? req.approvedAt.toISOString() : null,
         requestedBy: req.requestedBy ? { ...req.requestedBy, createdAt: req.requestedBy.createdAt.toISOString(), updatedAt: req.requestedBy.updatedAt.toISOString() } : null,
         approvedBy: req.approvedBy ? { ...req.approvedBy, createdAt: req.approvedBy.createdAt.toISOString(), updatedAt: req.approvedBy.updatedAt.toISOString() } : null,
-        items: req.items.map(item => ({
+        items: req.items.map((item: any) => ({
           ...item,
           createdAt: item.createdAt.toISOString(),
           updatedAt: item.updatedAt.toISOString(),
@@ -379,7 +388,7 @@ const resolvers = {
         approvedAt: req.approvedAt ? req.approvedAt.toISOString() : null,
         requestedBy: req.requestedBy ? { ...req.requestedBy, createdAt: req.requestedBy.createdAt.toISOString(), updatedAt: req.requestedBy.updatedAt.toISOString() } : null,
         approvedBy: req.approvedBy ? { ...req.approvedBy, createdAt: req.approvedBy.createdAt.toISOString(), updatedAt: req.approvedBy.updatedAt.toISOString() } : null,
-        items: req.items.map(item => ({
+        items: req.items.map((item: any) => ({
           ...item,
           createdAt: item.createdAt.toISOString(),
           updatedAt: item.updatedAt.toISOString(),
@@ -390,7 +399,7 @@ const resolvers = {
       const vendors = await prisma.vendor.findMany({
         orderBy: { createdAt: 'desc' }
       });
-      return vendors.map(v => ({
+      return vendors.map((v: any) => ({
         ...v,
         createdAt: v.createdAt.toISOString(),
         updatedAt: v.updatedAt.toISOString(),
@@ -415,7 +424,7 @@ const resolvers = {
         },
         orderBy: { createdAt: 'desc' }
       });
-      return pos.map(po => ({
+      return pos.map((po: any) => ({
         ...po,
         orderDate: po.orderDate ? po.orderDate.toISOString() : null,
         expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.toISOString() : null,
@@ -518,11 +527,11 @@ const resolvers = {
     },
     receipts: async () => {
       const recs = await prisma.receipt.findMany({ orderBy: { receivedDate: 'desc' }});
-      return recs.map(r => ({ ...r, receivedDate: r.receivedDate.toISOString(), createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }));
+      return recs.map((r: any) => ({ ...r, receivedDate: r.receivedDate.toISOString(), createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }));
     },
     receiptsByPurchaseOrder: async (_: any, { purchaseOrderId }: { purchaseOrderId: string }) => {
       const recs = await prisma.receipt.findMany({ where: { purchaseOrderId }, orderBy: { receivedDate: 'desc' }});
-      return recs.map(r => ({ ...r, receivedDate: r.receivedDate.toISOString(), createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }));
+      return recs.map((r: any) => ({ ...r, receivedDate: r.receivedDate.toISOString(), createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() }));
     }
   },
   Mutation: {
@@ -605,7 +614,7 @@ const resolvers = {
         approvedAt: updatedRequest.approvedAt ? updatedRequest.approvedAt.toISOString() : null,
         requestedBy: updatedRequest.requestedBy ? { ...updatedRequest.requestedBy, createdAt: updatedRequest.requestedBy.createdAt.toISOString(), updatedAt: updatedRequest.requestedBy.updatedAt.toISOString() } : null,
         approvedBy: updatedRequest.approvedBy ? { ...updatedRequest.approvedBy, createdAt: updatedRequest.approvedBy.createdAt.toISOString(), updatedAt: updatedRequest.approvedBy.updatedAt.toISOString() } : null,
-        items: updatedRequest.items.map(item => ({ ...item, createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString() }))
+        items: updatedRequest.items.map((item: any) => ({ ...item, createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString() }))
       };
     },
     createProcurementRequest: async (_: any, { input }: { input: any }, context: any) => {
@@ -762,7 +771,7 @@ const resolvers = {
       const timestamp = new Date();
       const poNumber = `PO-${timestamp.getFullYear()}${String(timestamp.getMonth() + 1).padStart(2, '0')}${String(timestamp.getDate()).padStart(2, '0')}-${String(timestamp.getHours()).padStart(2, '0')}${String(timestamp.getMinutes()).padStart(2, '0')}${String(timestamp.getSeconds()).padStart(2, '0')}`;
 
-      const poItems = req.items.map(item => {
+      const poItems = req.items.map((item: any) => {
         const unitCost = item.estimatedUnitCost ?? null;
         const lineTotal = unitCost !== null ? unitCost * item.quantity : null;
         return {
@@ -792,7 +801,7 @@ const resolvers = {
             poNumber,
             procurementRequestId: input.procurementRequestId,
             vendorId: input.vendorId,
-            status: 'DRAFT',
+            status: 'PENDING_APPROVAL',
             orderDate: input.orderDate ? new Date(input.orderDate) : null,
             expectedDeliveryDate: input.expectedDeliveryDate ? new Date(input.expectedDeliveryDate) : null,
             subtotal,
@@ -846,6 +855,147 @@ const resolvers = {
         console.error("Error creating PO:", error);
         throw new Error("Failed to create Purchase Order in database.");
       }
+    },
+    
+    approvePurchaseOrder: async (_: any, { id, approverId }: { id: string, approverId: string }, context: any) => {
+      requireRole(context.currentUser, ['ADMIN', 'APPROVER']);
+      const approver = await prisma.user.findUnique({ where: { id: approverId } });
+      if (!approver || (approver.role !== 'ADMIN' && approver.role !== 'APPROVER')) {
+        throw new Error("Invalid approver");
+      }
+      
+      const po = await prisma.purchaseOrder.findUnique({ where: { id } });
+      if (!po) throw new Error("Purchase Order not found");
+      
+      const finalPo = await prisma.purchaseOrder.update({
+        where: { id },
+        data: {
+          status: 'APPROVED',
+          approvedById: approverId,
+          approvedAt: new Date(),
+          denialReason: null
+        },
+        include: { 
+          procurementRequest: { include: { requestedBy: true, approvedBy: true } }, 
+          vendor: true, 
+          approvedBy: true,
+          items: { include: { receipts: true } },
+          receipts: true
+        }
+      });
+      
+      return {
+        ...finalPo,
+        createdAt: finalPo.createdAt.toISOString(),
+        updatedAt: finalPo.updatedAt.toISOString(),
+        orderDate: finalPo.orderDate ? finalPo.orderDate.toISOString() : null,
+        expectedDeliveryDate: finalPo.expectedDeliveryDate ? finalPo.expectedDeliveryDate.toISOString() : null,
+        approvedAt: finalPo.approvedAt ? finalPo.approvedAt.toISOString() : null,
+        procurementRequest: {
+          ...finalPo.procurementRequest,
+          createdAt: finalPo.procurementRequest.createdAt.toISOString(),
+          updatedAt: finalPo.procurementRequest.updatedAt.toISOString(),
+          neededByDate: finalPo.procurementRequest.neededByDate ? finalPo.procurementRequest.neededByDate.toISOString() : null,
+          approvedAt: finalPo.procurementRequest.approvedAt ? finalPo.procurementRequest.approvedAt.toISOString() : null,
+          requestedBy: finalPo.procurementRequest.requestedBy ? { ...finalPo.procurementRequest.requestedBy, createdAt: finalPo.procurementRequest.requestedBy.createdAt.toISOString(), updatedAt: finalPo.procurementRequest.requestedBy.updatedAt.toISOString() } : null,
+          approvedBy: finalPo.procurementRequest.approvedBy ? { ...finalPo.procurementRequest.approvedBy, createdAt: finalPo.procurementRequest.approvedBy.createdAt.toISOString(), updatedAt: finalPo.procurementRequest.approvedBy.updatedAt.toISOString() } : null,
+        },
+        vendor: { ...finalPo.vendor, createdAt: finalPo.vendor.createdAt.toISOString(), updatedAt: finalPo.vendor.updatedAt.toISOString() },
+        approvedBy: finalPo.approvedBy ? { ...finalPo.approvedBy, createdAt: finalPo.approvedBy.createdAt.toISOString(), updatedAt: finalPo.approvedBy.updatedAt.toISOString() } : null,
+        items: finalPo.items.map((i: any) => {
+          const qtyRec = i.receipts ? i.receipts.reduce((sum: number, r: any) => sum + r.quantityReceived, 0) : 0;
+          return {
+            ...i,
+            quantityReceived: qtyRec,
+            isFullyReceived: qtyRec >= i.quantity,
+            quantityRemaining: Math.max(0, i.quantity - qtyRec),
+            receipts: i.receipts ? i.receipts.map((r: any) => ({
+              ...r,
+              receivedDate: r.receivedDate.toISOString(),
+              createdAt: r.createdAt.toISOString(),
+              updatedAt: r.updatedAt.toISOString()
+            })) : [],
+            createdAt: i.createdAt.toISOString(),
+            updatedAt: i.updatedAt.toISOString()
+          };
+        }),
+        receipts: finalPo.receipts ? finalPo.receipts.map((r: any) => ({
+          ...r,
+          receivedDate: r.receivedDate.toISOString(),
+          createdAt: r.createdAt.toISOString(),
+          updatedAt: r.updatedAt.toISOString()
+        })) : []
+      };
+    },
+    denyPurchaseOrder: async (_: any, { id, approverId, reason }: { id: string, approverId: string, reason: string }, context: any) => {
+      requireRole(context.currentUser, ['ADMIN', 'APPROVER']);
+      const approver = await prisma.user.findUnique({ where: { id: approverId } });
+      if (!approver || (approver.role !== 'ADMIN' && approver.role !== 'APPROVER')) {
+        throw new Error("Invalid approver");
+      }
+      
+      const po = await prisma.purchaseOrder.findUnique({ where: { id } });
+      if (!po) throw new Error("Purchase Order not found");
+      
+      const finalPo = await prisma.purchaseOrder.update({
+        where: { id },
+        data: {
+          status: 'DENIED',
+          approvedById: approverId,
+          approvedAt: new Date(),
+          denialReason: reason
+        },
+        include: { 
+          procurementRequest: { include: { requestedBy: true, approvedBy: true } }, 
+          vendor: true, 
+          approvedBy: true,
+          items: { include: { receipts: true } },
+          receipts: true
+        }
+      });
+      
+      return {
+        ...finalPo,
+        createdAt: finalPo.createdAt.toISOString(),
+        updatedAt: finalPo.updatedAt.toISOString(),
+        orderDate: finalPo.orderDate ? finalPo.orderDate.toISOString() : null,
+        expectedDeliveryDate: finalPo.expectedDeliveryDate ? finalPo.expectedDeliveryDate.toISOString() : null,
+        approvedAt: finalPo.approvedAt ? finalPo.approvedAt.toISOString() : null,
+        procurementRequest: {
+          ...finalPo.procurementRequest,
+          createdAt: finalPo.procurementRequest.createdAt.toISOString(),
+          updatedAt: finalPo.procurementRequest.updatedAt.toISOString(),
+          neededByDate: finalPo.procurementRequest.neededByDate ? finalPo.procurementRequest.neededByDate.toISOString() : null,
+          approvedAt: finalPo.procurementRequest.approvedAt ? finalPo.procurementRequest.approvedAt.toISOString() : null,
+          requestedBy: finalPo.procurementRequest.requestedBy ? { ...finalPo.procurementRequest.requestedBy, createdAt: finalPo.procurementRequest.requestedBy.createdAt.toISOString(), updatedAt: finalPo.procurementRequest.requestedBy.updatedAt.toISOString() } : null,
+          approvedBy: finalPo.procurementRequest.approvedBy ? { ...finalPo.procurementRequest.approvedBy, createdAt: finalPo.procurementRequest.approvedBy.createdAt.toISOString(), updatedAt: finalPo.procurementRequest.approvedBy.updatedAt.toISOString() } : null,
+        },
+        vendor: { ...finalPo.vendor, createdAt: finalPo.vendor.createdAt.toISOString(), updatedAt: finalPo.vendor.updatedAt.toISOString() },
+        approvedBy: finalPo.approvedBy ? { ...finalPo.approvedBy, createdAt: finalPo.approvedBy.createdAt.toISOString(), updatedAt: finalPo.approvedBy.updatedAt.toISOString() } : null,
+        items: finalPo.items.map((i: any) => {
+          const qtyRec = i.receipts ? i.receipts.reduce((sum: number, r: any) => sum + r.quantityReceived, 0) : 0;
+          return {
+            ...i,
+            quantityReceived: qtyRec,
+            isFullyReceived: qtyRec >= i.quantity,
+            quantityRemaining: Math.max(0, i.quantity - qtyRec),
+            receipts: i.receipts ? i.receipts.map((r: any) => ({
+              ...r,
+              receivedDate: r.receivedDate.toISOString(),
+              createdAt: r.createdAt.toISOString(),
+              updatedAt: r.updatedAt.toISOString()
+            })) : [],
+            createdAt: i.createdAt.toISOString(),
+            updatedAt: i.updatedAt.toISOString()
+          };
+        }),
+        receipts: finalPo.receipts ? finalPo.receipts.map((r: any) => ({
+          ...r,
+          receivedDate: r.receivedDate.toISOString(),
+          createdAt: r.createdAt.toISOString(),
+          updatedAt: r.updatedAt.toISOString()
+        })) : []
+      };
     },
     updatePurchaseOrderStatus: async (_: any, { input }: { input: any }, context: any) => {
       requireRole(context.currentUser, ['ADMIN', 'BUYER']);
@@ -910,10 +1060,10 @@ const resolvers = {
 
       if (!po) throw new Error("Purchase Order not found.");
 
-      const item = po.items.find(i => i.id === input.purchaseOrderItemId);
+      const item = po.items.find((i: any) => i.id === input.purchaseOrderItemId);
       if (!item) throw new Error("Purchase Order Item not found.");
 
-      const currentReceived = item.receipts.reduce((sum, r) => sum + r.quantityReceived, 0);
+      const currentReceived = item.receipts.reduce((sum: number, r: any) => sum + r.quantityReceived, 0);
       if (currentReceived + input.quantityReceived > item.quantity) {
         throw new Error("Cannot receive more than the ordered quantity.");
       }
@@ -937,7 +1087,7 @@ const resolvers = {
       let allFullyReceived = true;
       if (updatedPo && updatedPo.items) {
         for (const i of updatedPo.items) {
-          const rec = i.receipts.reduce((sum, r) => sum + r.quantityReceived, 0);
+          const rec = i.receipts.reduce((sum: number, r: any) => sum + r.quantityReceived, 0);
           if (rec < i.quantity) {
             allFullyReceived = false;
           }

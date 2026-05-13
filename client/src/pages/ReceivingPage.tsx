@@ -55,7 +55,7 @@ export const ReceivingPage = () => {
             <FormField label="Purchase Order *">
               <select name="purchaseOrderId" value={receiveFormData.purchaseOrderId} onChange={handleReceiveChange} required>
                 <option value="" disabled>Select a PO</option>
-                {poData?.purchaseOrders?.filter((po: any) => po.status !== 'CLOSED' && po.status !== 'CANCELLED' && po.status !== 'RECEIVED').map((po: any) => (
+                {poData?.purchaseOrders?.filter((po: any) => ['APPROVED', 'ISSUED', 'ACKNOWLEDGED', 'PARTIALLY_RECEIVED'].includes(po.status)).map((po: any) => (
                   <option key={po.id} value={po.id}>{po.poNumber} - {po.vendor.name}</option>
                 ))}
               </select>

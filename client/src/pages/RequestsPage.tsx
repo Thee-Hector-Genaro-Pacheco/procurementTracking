@@ -57,9 +57,10 @@ export const RequestsPage = () => {
     } catch (err) {}
   }
 
-  const handleReview = async (id: string, status: string) => {
+  const handleReview = async (id: string, decision: string) => {
+    if (!currentUser) return;
     try {
-      await reviewRequest({ variables: { input: { id, status, rejectionReason: rejectionReason[id] || null } } })
+      await reviewRequest({ variables: { input: { id, approverId: currentUser.id, decision, rejectionReason: rejectionReason[id] || null } } })
     } catch (err) {}
   }
 
